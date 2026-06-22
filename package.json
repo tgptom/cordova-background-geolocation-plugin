@@ -1,6 +1,6 @@
 {
   "name": "cordova-background-geolocation-plugin",
-  "version": "2.3.3",
+  "version": "2.3.4",
   "description": "Cordova Background Geolocation Plugin",
   "main": "./www/BackgroundGeolocation.js",
   "types": "./www/BackgroundGeolocation.d.ts",
@@ -13,7 +13,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/haylltd/cordova-background-geolocation-plugin.git"
+    "url": "git+https://github.com/tgptom/cordova-background-geolocation-plugin.git"
   },
   "keywords": [
     "gps",
@@ -38,7 +38,7 @@
   "author": "",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/haylltd/cordova-background-geolocation-plugin/issues"
+    "url": "https://github.com/tgptom/cordova-background-geolocation-plugin/issues"
   },
-  "homepage": "https://github.com/haylltd/cordova-background-geolocation-plugin#readme"
+  "homepage": "https://github.com/tgptom/cordova-background-geolocation-plugin#readme"
 }

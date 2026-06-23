@@ -56,6 +56,18 @@ cordova plugin add cordova-background-geolocation-plugin \
 
 **Note:** To apply changes, you must remove and reinstall plugin.
 
+#### Installation warnings
+
+During `cordova plugin add` you may see warnings like:
+
+```
+config file res/values/strings.xml requested for changes not found at \platforms\android\app\src\main\res\values\strings.xml, ignoring
+```
+
+These warnings appear **both during Android and iOS installation** — the iOS ones are **harmless false positives** caused by Cordova's global config-merge pass evaluating Android-only `<config-file>` blocks across all platforms. iOS installation is unaffected.
+
+For Android, the plugin automatically creates a minimal `strings.xml` file if one does not already exist (via the `after_plugin_install` and `before_prepare` hooks), so these warnings are resolved on the next `cordova prepare` run.
+
 ### Usage
 
 First, configure the plugin with the settings you require.

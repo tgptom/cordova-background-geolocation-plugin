@@ -20,7 +20,6 @@ import ch.qos.logback.classic.db.names.DBNameResolver;
 import ch.qos.logback.classic.db.names.DefaultDBNameResolver;
 import ch.qos.logback.classic.db.names.TableName;
 import ch.qos.logback.core.CoreConstants;
-import ch.qos.logback.core.android.CommonPathUtil;
 
 public class DBLogReader {
 
@@ -124,7 +123,7 @@ public class DBLogReader {
         }
 
         try {
-            File dbfile = new File(CommonPathUtil.getDatabaseDirectoryPath(packageName), DB_FILENAME);
+            File dbfile = new File("/data/data/" + packageName + "/databases", DB_FILENAME);
             mDatabase = SQLiteDatabase.openDatabase(dbfile.getPath(), null, SQLiteDatabase.OPEN_READONLY);
         } catch (SQLiteException e) {
             throw new SQLException("Cannot open database", e);

@@ -3,7 +3,6 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     id="cordova-background-geolocation-plugin"
     version="2.3.4">
-    <hook type="before_plugin_install" src="scripts/android_before_install.js" />
     <name>cordova-background-geolocation-plugin</name>
     <description>Cordova Background Geolocation Plugin</description>
     <license>Apache-2.0</license>
@@ -24,6 +23,7 @@
 
     <!-- android -->
     <platform name="android">
+        <hook type="before_plugin_install" src="scripts/android_before_install.js" />
         <preference name="GOOGLE_PLAY_SERVICES_VERSION" default="17+"/>
         <preference name="ICON" default="@mipmap/ic_launcher" />
         <preference name="SMALL_ICON" default="@mipmap/ic_launcher" />

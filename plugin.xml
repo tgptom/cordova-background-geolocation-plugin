@@ -21,10 +21,12 @@
     <js-module src="www/radio.js" name="radio">
     </js-module>
 
+    <hook type="before_plugin_install" src="scripts/android_strings_setup.js" />
+    <hook type="after_plugin_install" src="scripts/android_strings_setup.js" />
+    <hook type="before_prepare" src="scripts/android_strings_setup.js" />
+
     <!-- android -->
     <platform name="android">
-        <hook type="after_plugin_install" src="scripts/android_strings_setup.js" />
-        <hook type="before_prepare" src="scripts/android_strings_setup.js" />
         <preference name="GOOGLE_PLAY_SERVICES_VERSION" default="17+"/>
         <preference name="ICON" default="@mipmap/ic_launcher" />
         <preference name="SMALL_ICON" default="@mipmap/ic_launcher" />

@@ -1,6 +1,9 @@
 package com.marianhello.bgloc;
 
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.content.Context;
+import android.os.Bundle;
 
 /**
  * Created by finch on 19/07/16.
@@ -37,16 +40,47 @@ public class ResourceResolver {
         return getApplicationContext().getString(getAppResource(name, "string"));
     }
 
+    private String getManifestValue(String name) {
+        Context appContext = getApplicationContext();
+
+        try {
+            ApplicationInfo applicationInfo = appContext.getPackageManager()
+                    .getApplicationInfo(appContext.getPackageName(), PackageManager.GET_META_DATA);
+            Bundle metaData = applicationInfo.metaData;
+
+            if (metaData == null || !metaData.containsKey(name)) {
+                return null;
+            }
+
+            Object value = metaData.get(name);
+
+            if (value instanceof Integer) {
+                return appContext.getString((Integer) value);
+            }
+
+            if (value != null) {
+                return value.toString();
+            }
+        } catch (PackageManager.NameNotFoundException ignored) {}
+
+        return null;
+    }
+
+    private String getConfigValue(String name) {
+        String value = getManifestValue(name);
+        return value != null ? value : getString(name);
+    }
+
     public String getAccountName() {
-        return getString(ACCOUNT_NAME_RESOURCE);
+        return getConfigValue(ACCOUNT_NAME_RESOURCE);
     }
 
     public String getAccountType() {
-        return getString(ACCOUNT_TYPE_RESOURCE);
+        return getConfigValue(ACCOUNT_TYPE_RESOURCE);
     }
 
     public String getAuthority() {
-        return getString(AUTHORITY_TYPE_RESOURCE);
+        return getConfigValue(AUTHORITY_TYPE_RESOURCE);
     }
 
     public static ResourceResolver newInstance(Context context) {

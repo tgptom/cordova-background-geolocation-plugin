@@ -21,7 +21,6 @@
     <js-module src="www/radio.js" name="radio">
     </js-module>
 
-    <hook type="before_plugin_install" src="scripts/android_strings_setup.js" />
     <hook type="after_plugin_install" src="scripts/android_strings_setup.js" />
     <hook type="before_prepare" src="scripts/android_strings_setup.js" />
 
@@ -154,9 +153,12 @@
             </service>
             <provider
                 android:name="com.marianhello.bgloc.data.provider.LocationContentProvider"
-                android:authorities="@string/plugin_bgloc_content_authority"
+                android:authorities="$CONTENT_AUTHORITY"
                 android:exported="false"
                 android:syncable="true"/>
+            <meta-data android:name="plugin_bgloc_account_name" android:value="$ACCOUNT_NAME" />
+            <meta-data android:name="plugin_bgloc_account_type" android:value="$ACCOUNT_TYPE" />
+            <meta-data android:name="plugin_bgloc_content_authority" android:value="$CONTENT_AUTHORITY" />
             <service
                 android:enabled="true"
                 android:exported="false"
@@ -198,16 +200,10 @@
             </feature>
         </config-file>
 
-        <config-file target="res/values/strings.xml" parent="/resources">
-            <string name="plugin_bgloc_account_name">$ACCOUNT_NAME</string>
-            <string name="plugin_bgloc_account_type">$ACCOUNT_TYPE</string>
-            <string name="plugin_bgloc_content_authority">$CONTENT_AUTHORITY</string>
-        </config-file>
-
         <edit-config file="res/xml/authenticator.xml" target="/*" mode="overwrite">
           <account-authenticator
               xmlns:android="http://schemas.android.com/apk/res/android"
-              android:accountType="@string/plugin_bgloc_account_type"
+              android:accountType="$ACCOUNT_TYPE"
               android:icon="$ICON"
               android:smallIcon="$SMALL_ICON"
               android:label="$ACCOUNT_LABEL"/>
@@ -216,8 +212,8 @@
         <edit-config file="res/xml/syncadapter.xml" target="/*" mode="overwrite">
           <sync-adapter
               xmlns:android="http://schemas.android.com/apk/res/android"
-              android:contentAuthority="@string/plugin_bgloc_content_authority"
-              android:accountType="@string/plugin_bgloc_account_type"
+              android:contentAuthority="$CONTENT_AUTHORITY"
+              android:accountType="$ACCOUNT_TYPE"
               android:userVisible="false"
               android:supportsUploading="true"
               android:allowParallelSyncs="false"

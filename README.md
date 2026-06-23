@@ -58,7 +58,11 @@ cordova plugin add cordova-background-geolocation-plugin \
 
 #### Installation warnings
 
-The plugin uses top-level `before_plugin_install`, `after_plugin_install`, and `before_prepare` hooks to automatically create a minimal `strings.xml` file if one does not already exist. This ensures the file is in place before Cordova's config-merge pass runs, so no warnings should appear during `cordova plugin add`.
+The earlier `before_plugin_install` hook was removed because Cordova runs it before the plugin's own files are copied into `plugins/`, which caused `scripts/android_strings_setup.js` to be skipped during packaged installs.
+
+The plugin now keeps the top-level `after_plugin_install` and `before_prepare` hooks. That is the correct combination for running the Android setup script after the plugin is available and before later `cordova prepare` runs.
+
+Android account and authority values are configured without relying on Cordova to merge into an app-owned `res/values/strings.xml` during install, so the previous skipped-script and missing-`strings.xml` warnings should no longer appear.
 
 ### Usage
 

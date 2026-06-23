@@ -6,6 +6,8 @@
 !/*.md
 !/plugin.xml
 !/package.json
+!/scripts
+!/scripts/android_strings_setup.js
 !/www
 !/android
 /android/*

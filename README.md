@@ -102,7 +102,7 @@ A more comprehensive example can be found in the [Documentation](https://haylltd
 | Plugin version   | Cordova CLI       | Cordova Platform Android | Cordova Platform iOS |
 |------------------|-------------------|--------------------------|----------------------|
 | >1.0.0           | 8.0.0             | 8.0.0                    | 6.0.0                |
-| >2.0.0           | 10.0.0            | 10.0.0                   | 6.0.0                |
+| >2.0.0           | 10.0.0            | 12.0.0                   | 8.0.0                |
 
 ## Licence
 

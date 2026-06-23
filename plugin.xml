@@ -10,8 +10,8 @@
 
     <engines>
         <engine name="cordova" version=">=8.0.0"/>
-        <engine name="cordova-android" version=">=8.0.0"/>
-        <engine name="cordova-ios" version=">=6.0.0"/>
+        <engine name="cordova-android" version=">=12.0.0"/>
+        <engine name="cordova-ios" version=">=8.0.0"/>
     </engines>
 
     <js-module src="www/BackgroundGeolocation.js" name="BackgroundGeolocation">
@@ -35,8 +35,8 @@
         <preference name="CONTENT_AUTHORITY" default="$PACKAGE_NAME" />
 
         <framework src="com.google.android.gms:play-services-location:$GOOGLE_PLAY_SERVICES_VERSION" />
-        <framework src="androidx.core:core:1.1.0" />
-        <framework src="androidx.appcompat:appcompat:1.1.0" />
+        <framework src="androidx.core:core:1.13.1" />
+        <framework src="androidx.appcompat:appcompat:1.7.0" />
         <framework src="android/dependencies.gradle" custom="true" type="gradleReference"/>
         <!-- Generated with gen_sources.sh @ 2019-09-24 08:28:46 -->
         <source-file src="android/CDVBackgroundGeolocation/src/main/java/com/evgenii/jsevaluator/HandlerWrapper.java" target-dir="src/com/evgenii/jsevaluator" />
@@ -173,7 +173,6 @@
                   <action android:name="android.intent.action.BOOT_COMPLETED" />
                </intent-filter>
             </receiver>
-            <uses-library android:name="org.apache.http.legacy" android:required="true" />
         </config-file>
 
         <config-file target="AndroidManifest.xml" parent="/manifest">

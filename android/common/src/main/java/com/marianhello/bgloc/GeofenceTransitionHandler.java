@@ -5,13 +5,15 @@ import android.content.Intent;
 import android.os.Build;
 import android.util.Log;
 
+import androidx.annotation.Keep;
+
 import com.marianhello.bgloc.data.ConfigurationDAO;
 import com.marianhello.bgloc.data.DAOFactory;
 import com.marianhello.bgloc.service.LocationServiceImpl;
-import com.marianhello.bgloc.service.LocationServiceProxy;
 
 import org.json.JSONException;
 
+@Keep
 public final class GeofenceTransitionHandler {
     private static final String TAG = GeofenceTransitionHandler.class.getName();
     private static final int GEOFENCE_TRANSITION_ENTER = 1;
@@ -24,13 +26,14 @@ public final class GeofenceTransitionHandler {
                                              boolean hasActiveInsideGeofence) {
         Context applicationContext = context.getApplicationContext();
         if (transitionType == GEOFENCE_TRANSITION_EXIT) {
-            if (hasActiveInsideGeofence || !LocationServiceImpl.isRunning()) {
+            if (hasActiveInsideGeofence) {
                 return;
             }
 
             Log.i(TAG, "Stopping precise tracking after native geofence exit");
             try {
-                new LocationServiceProxy(applicationContext).stop();
+                applicationContext.stopService(
+                        new Intent(applicationContext, LocationServiceImpl.class));
             } catch (RuntimeException error) {
                 Log.e(TAG, "Unable to stop precise tracking after geofence exit", error);
             }

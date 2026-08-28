@@ -364,6 +364,7 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
         } else if (ACTION_FORCE_SYNC.equals(action)) {
             logger.debug("Forced location sync requested");
             facade.forceSync();
+            callbackContext.success();
             return true;
         }
 

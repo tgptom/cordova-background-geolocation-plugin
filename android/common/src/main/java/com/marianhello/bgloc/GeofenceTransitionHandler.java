@@ -18,6 +18,7 @@ public final class GeofenceTransitionHandler {
     private static final String TAG = GeofenceTransitionHandler.class.getName();
     private static final int GEOFENCE_TRANSITION_ENTER = 1;
     private static final int GEOFENCE_TRANSITION_EXIT = 2;
+    private static boolean stopRequested;
 
     private GeofenceTransitionHandler() {
     }
@@ -31,6 +32,9 @@ public final class GeofenceTransitionHandler {
             }
 
             Log.i(TAG, "Stopping precise tracking after native geofence exit");
+            synchronized (GeofenceTransitionHandler.class) {
+                stopRequested = true;
+            }
             try {
                 applicationContext.stopService(
                         new Intent(applicationContext, LocationServiceImpl.class));
@@ -40,7 +44,16 @@ public final class GeofenceTransitionHandler {
             return;
         }
 
-        if (transitionType != GEOFENCE_TRANSITION_ENTER || LocationServiceImpl.isRunning()) {
+        if (transitionType != GEOFENCE_TRANSITION_ENTER) {
+            return;
+        }
+
+        boolean shouldStart;
+        synchronized (GeofenceTransitionHandler.class) {
+            shouldStart = stopRequested || !LocationServiceImpl.isRunning();
+            stopRequested = false;
+        }
+        if (!shouldStart) {
             return;
         }
 

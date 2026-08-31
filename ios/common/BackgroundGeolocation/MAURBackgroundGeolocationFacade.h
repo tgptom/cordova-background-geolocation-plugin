@@ -16,13 +16,23 @@
 #import "MAURLocation.h"
 #import "MAURConfig.h"
 
+typedef NS_ENUM(NSInteger, MAURTrackingOwner) {
+    MAURTrackingOwnerNone = 0,
+    MAURTrackingOwnerManual = 1,
+    MAURTrackingOwnerGeofence = 2
+};
+
 @interface MAURBackgroundGeolocationFacade : NSObject
 
 @property (weak, nonatomic) id<MAURProviderDelegate> delegate;
 
++ (instancetype) sharedInstance;
 - (BOOL) configure:(MAURConfig*)config error:(NSError * __autoreleasing *)outError;
 - (BOOL) start:(NSError * __autoreleasing *)outError;
+- (BOOL) startWithOwner:(MAURTrackingOwner)owner error:(NSError * __autoreleasing *)outError;
 - (BOOL) stop:(NSError * __autoreleasing *)outError;
+- (BOOL) stopForOwner:(MAURTrackingOwner)owner error:(NSError * __autoreleasing *)outError;
+- (MAURTrackingOwner) trackingOwner;
 - (BOOL) locationServicesEnabled;
 - (MAURLocationAuthorizationStatus) authorizationStatus;
 - (BOOL) isStarted;

@@ -42,6 +42,7 @@
 
 static NSString * const BGGeolocationDomain = @"com.marianhello";
 static NSString * const TAG = @"BgGeo";
+static NSString * const TrackingOwnerKey = @"MAURBackgroundGeolocationTrackingOwner";
 
 FMDBLogger *sqliteLogger;
 
@@ -62,6 +63,15 @@ FMDBLogger *sqliteLogger;
     MAURPostLocationTask *postLocationTask;
 }
 
++ (instancetype) sharedInstance
+{
+    static MAURBackgroundGeolocationFacade *sharedFacade = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        sharedFacade = [[self alloc] init];
+    });
+    return sharedFacade;
+}
 
 - (instancetype) init
 {
@@ -219,6 +229,28 @@ FMDBLogger *sqliteLogger;
     return isStarted;
 }
 
+- (BOOL) startWithOwner:(MAURTrackingOwner)owner error:(NSError * __autoreleasing *)outError
+{
+    MAURTrackingOwner currentOwner = [self trackingOwner];
+    if (isStarted) {
+        if (owner == MAURTrackingOwnerManual) {
+            [[NSUserDefaults standardUserDefaults] setInteger:owner forKey:TrackingOwnerKey];
+            return YES;
+        }
+        return currentOwner == owner;
+    }
+
+    if (owner == MAURTrackingOwnerGeofence && currentOwner == MAURTrackingOwnerManual) {
+        return NO;
+    }
+
+    BOOL started = [self start:outError];
+    if (started) {
+        [[NSUserDefaults standardUserDefaults] setInteger:owner forKey:TrackingOwnerKey];
+    }
+    return started;
+}
+
 /**
  * Turn off background geolocation
  */
@@ -227,6 +259,7 @@ FMDBLogger *sqliteLogger;
     DDLogInfo(@"%@ #stop", TAG);
     
     if (!isStarted) {
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:TrackingOwnerKey];
         return YES;
     }
     
@@ -235,8 +268,29 @@ FMDBLogger *sqliteLogger;
     [self runOnMainThread:^{
         isStarted = ![locationProvider onStop:outError];
     }];
+
+    if (!isStarted && (outError == nil || *outError == nil)) {
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:TrackingOwnerKey];
+    }
     
     return isStarted;
+}
+
+- (BOOL) stopForOwner:(MAURTrackingOwner)owner error:(NSError * __autoreleasing *)outError
+{
+    if ([self trackingOwner] != owner) {
+        return YES;
+    }
+    return [self stop:outError];
+}
+
+- (MAURTrackingOwner) trackingOwner
+{
+    NSInteger owner = [[NSUserDefaults standardUserDefaults] integerForKey:TrackingOwnerKey];
+    if (owner != MAURTrackingOwnerManual && owner != MAURTrackingOwnerGeofence) {
+        return MAURTrackingOwnerNone;
+    }
+    return (MAURTrackingOwner)owner;
 }
 
 /**

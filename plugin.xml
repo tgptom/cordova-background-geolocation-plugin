@@ -296,6 +296,8 @@
         <source-file src="ios/common/BackgroundGeolocation/MAURActivityLocationProvider.m" />
         <header-file src="ios/common/BackgroundGeolocation/MAURBackgroundGeolocationFacade.h" />
         <source-file src="ios/common/BackgroundGeolocation/MAURBackgroundGeolocationFacade.m" />
+        <header-file src="ios/common/BackgroundGeolocation/MAURGeofenceTransitionHandler.h" />
+        <source-file src="ios/common/BackgroundGeolocation/MAURGeofenceTransitionHandler.m" />
         <header-file src="ios/common/BackgroundGeolocation/MAURBackgroundSync.h" />
         <source-file src="ios/common/BackgroundGeolocation/MAURBackgroundSync.m" />
         <header-file src="ios/common/BackgroundGeolocation/MAURBackgroundTaskManager.h" />

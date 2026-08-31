@@ -28,7 +28,7 @@ static NSString * const TAG = @"CDVBackgroundGeolocation";
 - (void)pluginInitialize
 {
 
-    facade = [[MAURBackgroundGeolocationFacade alloc] init];
+    facade = [MAURBackgroundGeolocationFacade sharedInstance];
     facade.delegate = self;
 
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onAppPause:) name:UIApplicationDidEnterBackgroundNotification object:nil];
@@ -71,7 +71,29 @@ static NSString * const TAG = @"CDVBackgroundGeolocation";
     [self.commandDelegate runInBackground:^{
         NSError *error = nil;
 
-        [facade start:&error];
+        [facade startWithOwner:MAURTrackingOwnerManual error:&error];
+        if (error == nil) {
+            [self sendEvent:@"start"];
+        } else {
+            [self sendError:error];
+        }
+        CDVPluginResult* result = nil;
+        if ([facade configure:config error:&error]) {
+            result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+        } else {
+            result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsDictionary:[self errorToDictionary:error]];
+        }
+        [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+    }];
+}
+
+- (void) startForGeofence:(CDVInvokedUrlCommand*)command
+{
+    NSLog(@"%@ #%@", TAG, @"startForGeofence");
+    [self.commandDelegate runInBackground:^{
+        NSError *error = nil;
+
+        [facade startWithOwner:MAURTrackingOwnerGeofence error:&error];
         if (error == nil) {
             [self sendEvent:@"start"];
         } else {
@@ -492,8 +514,9 @@ static NSString * const TAG = @"CDVBackgroundGeolocation";
 
     if ([dict objectForKey:UIApplicationLaunchOptionsLocationKey]) {
         NSLog(@"%@ %@", TAG, @"started by system on location event.");
-        if (![config stopOnTerminate]) {
-            [facade start:nil];
+        MAURTrackingOwner owner = [facade trackingOwner];
+        if (![config stopOnTerminate] && owner != MAURTrackingOwnerNone) {
+            [facade startWithOwner:owner error:nil];
             [facade switchMode:MAURBackgroundMode];
         }
     }

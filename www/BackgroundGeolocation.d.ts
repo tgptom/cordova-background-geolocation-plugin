@@ -514,6 +514,12 @@ export interface BackgroundGeolocationPlugin {
   start(): Promise<void>;
 
   /**
+   * Start an iOS session owned by native geofence orchestration.
+   * Platform: iOS
+   */
+  startForGeofence(): Promise<void>;
+
+  /**
    * Stop background geolocation.
    * Platform: iOS, Android
    */

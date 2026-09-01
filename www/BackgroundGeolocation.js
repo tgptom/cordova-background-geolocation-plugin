@@ -98,6 +98,10 @@ var BackgroundGeolocation = {
     return execWithPromise(null, null, 'start');
   },
 
+  startForGeofence: function () {
+    return execWithPromise(null, null, 'startForGeofence');
+  },
+
   stop: function () {
     return execWithPromise(null, null, 'stop');
   },

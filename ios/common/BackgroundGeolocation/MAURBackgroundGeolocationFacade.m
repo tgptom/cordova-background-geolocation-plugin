@@ -42,6 +42,8 @@
 
 static NSString * const BGGeolocationDomain = @"com.marianhello";
 static NSString * const TAG = @"BgGeo";
+static NSString * const TrackingOwnerKey = @"MAURBackgroundGeolocationTrackingOwner";
+static NSString * const ManualTrackingIntentKey = @"MAURBackgroundGeolocationManualTrackingIntent";
 
 FMDBLogger *sqliteLogger;
 
@@ -60,6 +62,16 @@ FMDBLogger *sqliteLogger;
     MAURLocation *stationaryLocation;
     MAURAbstractLocationProvider<MAURLocationProvider> *locationProvider;
     MAURPostLocationTask *postLocationTask;
+}
+
++ (instancetype) sharedInstance
+{
+    static MAURBackgroundGeolocationFacade *sharedFacade = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        sharedFacade = [[self alloc] init];
+    });
+    return sharedFacade;
 }
 
 
@@ -219,6 +231,35 @@ FMDBLogger *sqliteLogger;
     return isStarted;
 }
 
+- (BOOL) startWithOwner:(MAURTrackingOwner)owner error:(NSError * __autoreleasing *)outError
+{
+    MAURTrackingOwner currentOwner = [self trackingOwner];
+    if (isStarted) {
+        if (owner == MAURTrackingOwnerManual) {
+            [self setTrackingOwner:MAURTrackingOwnerManual];
+            [self setManualTrackingIntent:YES];
+            return YES;
+        }
+        return currentOwner == owner;
+    }
+
+    if (owner == MAURTrackingOwnerGeofence && currentOwner == MAURTrackingOwnerManual) {
+        return NO;
+    }
+
+    if (owner == MAURTrackingOwnerManual) {
+        [self setManualTrackingIntent:YES];
+    }
+
+    BOOL started = [self start:outError];
+    if (started) {
+        [self setTrackingOwner:owner];
+    } else if (owner != MAURTrackingOwnerManual) {
+        [self setTrackingOwner:MAURTrackingOwnerNone];
+    }
+    return started;
+}
+
 /**
  * Turn off background geolocation
  */
@@ -227,6 +268,8 @@ FMDBLogger *sqliteLogger;
     DDLogInfo(@"%@ #stop", TAG);
     
     if (!isStarted) {
+        [self setTrackingOwner:MAURTrackingOwnerNone];
+        [self setManualTrackingIntent:NO];
         return YES;
     }
     
@@ -235,8 +278,43 @@ FMDBLogger *sqliteLogger;
     [self runOnMainThread:^{
         isStarted = ![locationProvider onStop:outError];
     }];
-    
-    return isStarted;
+
+    if (!isStarted && (outError == nil || *outError == nil)) {
+        [self setTrackingOwner:MAURTrackingOwnerNone];
+        [self setManualTrackingIntent:NO];
+        return YES;
+    }
+
+    return NO;
+}
+
+- (BOOL) stopForOwner:(MAURTrackingOwner)owner error:(NSError * __autoreleasing *)outError
+{
+    if ([self trackingOwner] != owner) {
+        return YES;
+    }
+    return [self stop:outError];
+}
+
+- (MAURTrackingOwner) trackingOwner
+{
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSInteger owner = [defaults integerForKey:TrackingOwnerKey];
+    if (owner != MAURTrackingOwnerManual && owner != MAURTrackingOwnerGeofence) {
+        return MAURTrackingOwnerNone;
+    }
+
+    if (!isStarted) {
+        [self setTrackingOwner:MAURTrackingOwnerNone];
+        return MAURTrackingOwnerNone;
+    }
+
+    return (MAURTrackingOwner)owner;
+}
+
+- (BOOL) hasManualTrackingIntent
+{
+    return [[NSUserDefaults standardUserDefaults] boolForKey:ManualTrackingIntentKey];
 }
 
 /**
@@ -589,6 +667,28 @@ FMDBLogger *sqliteLogger;
     } else {
         [locationProvider onTerminate];
     }
+}
+
+- (void) setTrackingOwner:(MAURTrackingOwner)owner
+{
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if (owner == MAURTrackingOwnerManual || owner == MAURTrackingOwnerGeofence) {
+        [defaults setInteger:owner forKey:TrackingOwnerKey];
+    } else {
+        [defaults removeObjectForKey:TrackingOwnerKey];
+    }
+    [defaults synchronize];
+}
+
+- (void) setManualTrackingIntent:(BOOL)enabled
+{
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if (enabled) {
+        [defaults setBool:YES forKey:ManualTrackingIntentKey];
+    } else {
+        [defaults removeObjectForKey:ManualTrackingIntentKey];
+    }
+    [defaults synchronize];
 }
 
 - (void) dealloc

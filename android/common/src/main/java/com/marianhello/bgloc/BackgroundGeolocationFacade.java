@@ -61,6 +61,7 @@ public class BackgroundGeolocationFacade {
     private boolean mServiceBroadcastReceiverRegistered = false;
     private boolean mLocationModeChangeReceiverRegistered = false;
     private boolean mIsPaused = false;
+    private static final long PERMISSION_PENDING_TIMEOUT_MS = 10 * 60 * 1000L;
     private static final long START_ACK_TIMEOUT_MS = 15000L;
     private static final long STOP_ACK_TIMEOUT_MS = 15000L;
 
@@ -160,7 +161,8 @@ public class BackgroundGeolocationFacade {
 
                 case LocationServiceImpl.MSG_ON_SERVICE_STARTED: {
                     logger.debug("Received MSG_ON_SERVICE_STARTED");
-                    mLifecycleCoordinator.handleServiceLifecycleAction(action);
+                    long requestGeneration = bundle.getLong("requestGeneration", 0L);
+                    mLifecycleCoordinator.handleServiceLifecycleAction(action, requestGeneration);
                     resolvePendingGeofenceStartSuccess();
                     if (mDelegate != null) {
                         mDelegate.onServiceStatusChanged(SERVICE_STARTED);
@@ -170,7 +172,7 @@ public class BackgroundGeolocationFacade {
 
                 case LocationServiceImpl.MSG_ON_SERVICE_STOPPED: {
                     logger.debug("Received MSG_ON_SERVICE_STOPPED");
-                    mLifecycleCoordinator.handleServiceLifecycleAction(action);
+                    mLifecycleCoordinator.handleServiceLifecycleAction(action, bundle.getLong("requestGeneration", 0L));
                     if (mDelegate != null) {
                         mDelegate.onServiceStatusChanged(SERVICE_STOPPED);
                     }
@@ -274,7 +276,7 @@ public class BackgroundGeolocationFacade {
                                final StartRequestCallback geofenceCallback) {
         logger.debug("Starting service");
         final long permissionPendingGeneration = requestedOwner == TrackingOwnershipStore.OWNER_MANUAL
-                ? mLifecycleCoordinator.requestStartIntent(requestedOwner)
+                ? mLifecycleCoordinator.requestPermissionPendingStart(requestedOwner, PERMISSION_PENDING_TIMEOUT_MS)
                 : 0L;
         if (requestedOwner == TrackingOwnershipStore.OWNER_GEOFENCE) {
             setPendingGeofenceStartCallback(geofenceCallback);
@@ -300,35 +302,49 @@ public class BackgroundGeolocationFacade {
                     return;
                 }
 
-                final long pendingGeneration = mLifecycleCoordinator.requestStart(requestedOwner, START_ACK_TIMEOUT_MS, new TrackingLifecycleCoordinator.TimeoutCallback() {
-                    @Override
-                    public void onTimeout(long generation) {
-                        if (requestedOwner == TrackingOwnershipStore.OWNER_GEOFENCE) {
-                            notifyGeofenceStartError(new PluginException(
-                                    "Unable to start geofence-owned background geolocation.",
-                                    PluginException.START_FAILED_ERROR
-                            ));
-                        }
+                final long pendingGeneration;
+                if (permissionPendingGeneration != 0L) {
+                    boolean promoted = mLifecycleCoordinator.promotePendingStartToServiceAck(
+                            permissionPendingGeneration,
+                            START_ACK_TIMEOUT_MS,
+                            null
+                    );
+                    if (!promoted) {
+                        return;
                     }
-                });
+                    pendingGeneration = permissionPendingGeneration;
+                } else {
+                    pendingGeneration = mLifecycleCoordinator.requestStart(requestedOwner, START_ACK_TIMEOUT_MS, new TrackingLifecycleCoordinator.TimeoutCallback() {
+                        @Override
+                        public void onTimeout(long generation) {
+                            if (requestedOwner == TrackingOwnershipStore.OWNER_GEOFENCE) {
+                                notifyGeofenceStartError(new PluginException(
+                                        "Unable to start geofence-owned background geolocation.",
+                                        PluginException.START_FAILED_ERROR
+                                ));
+                            }
+                        }
+                    });
+                }
+
                 try {
-                    startBackgroundService();
+                    startBackgroundService(pendingGeneration);
                 } catch (SecurityException e) {
-                    clearPendingStartRequest(pendingGeneration);
+                    clearPendingStartRequest(pendingGeneration, true);
                     notifyGeofenceStartError(new PluginException(
                             "Unable to start geofence-owned background geolocation due to missing permission.",
                             e,
                             PluginException.START_FAILED_ERROR
                     ));
                 } catch (IllegalStateException e) {
-                    clearPendingStartRequest(pendingGeneration);
+                    clearPendingStartRequest(pendingGeneration, true);
                     notifyGeofenceStartError(new PluginException(
                             "Unable to start geofence-owned background geolocation due to foreground-service restrictions.",
                             e,
                             PluginException.START_FAILED_ERROR
                     ));
                 } catch (RuntimeException e) {
-                    clearPendingStartRequest(pendingGeneration);
+                    clearPendingStartRequest(pendingGeneration, true);
                     notifyGeofenceStartError(new PluginException(
                             "Unable to start geofence-owned background geolocation.",
                             e,
@@ -341,7 +357,7 @@ public class BackgroundGeolocationFacade {
             public void onPermissionDenied(DeniedPermissions deniedPermissions) {
                 logger.info("User denied requested permissions");
                 if (permissionPendingGeneration != 0L) {
-                    clearPendingStartRequest(permissionPendingGeneration);
+                    clearPendingStartRequest(permissionPendingGeneration, false);
                 }
                 notifyGeofenceStartError(new PluginException("Permission denied", PluginException.PERMISSION_DENIED_ERROR));
                 if (mDelegate != null) {
@@ -583,11 +599,23 @@ public class BackgroundGeolocationFacade {
     }
 
     protected void startBackgroundService() {
+        startBackgroundService(0L);
+    }
+
+    protected void startBackgroundService(long requestGeneration) {
         logger.info("Attempt to start bg service");
         if (mIsPaused) {
-            mService.startForegroundService();
+            if (requestGeneration != 0L && mService instanceof LocationServiceProxy) {
+                ((LocationServiceProxy) mService).startForegroundService(requestGeneration);
+            } else {
+                mService.startForegroundService();
+            }
         } else {
-            mService.start();
+            if (requestGeneration != 0L && mService instanceof LocationServiceProxy) {
+                ((LocationServiceProxy) mService).start(requestGeneration);
+            } else {
+                mService.start();
+            }
         }
     }
 
@@ -610,8 +638,12 @@ public class BackgroundGeolocationFacade {
         mPendingGeofenceStartCallback = callback;
     }
 
-    private synchronized void clearPendingStartRequest(long generation) {
-        mLifecycleCoordinator.clearPendingStart(generation);
+    private synchronized void clearPendingStartRequest(long generation, boolean markFailed) {
+        if (markFailed) {
+            mLifecycleCoordinator.clearPendingStart(generation);
+        } else {
+            mLifecycleCoordinator.clearPendingStartRequestOnly(generation);
+        }
     }
 
     private synchronized void clearPendingStartRequest() {

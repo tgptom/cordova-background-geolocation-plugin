@@ -159,8 +159,17 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
         } else if (ACTION_START_FOR_GEOFENCE.equals(action)) {
             runOnWebViewThread(new Runnable() {
                 public void run() {
-                    facade.startForGeofence();
-                    callbackContext.success();
+                    facade.startForGeofence(new BackgroundGeolocationFacade.StartRequestCallback() {
+                        @Override
+                        public void onSuccess() {
+                            callbackContext.success();
+                        }
+
+                        @Override
+                        public void onError(PluginException exception) {
+                            callbackContext.sendPluginResult(ErrorPluginResult.from(exception));
+                        }
+                    });
                 }
             });
 

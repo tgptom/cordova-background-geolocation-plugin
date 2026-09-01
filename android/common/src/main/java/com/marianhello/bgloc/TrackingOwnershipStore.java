@@ -30,6 +30,7 @@ final class TrackingOwnershipStore {
     private static final int PENDING_START_PHASE_NONE = 0;
     private static final int PENDING_START_PHASE_PERMISSION = 1;
     private static final int PENDING_START_PHASE_SERVICE_ACK = 2;
+    private static final int PENDING_START_PHASE_QUEUED = 3;
 
     private final SharedPreferences prefs;
 
@@ -46,14 +47,15 @@ final class TrackingOwnershipStore {
             this.serviceStarted = serviceStarted;
         }
 
-        static final class StartGenerationStatus {
-            final int owner;
-            final boolean cancelled;
+    }
 
-            StartGenerationStatus(int owner, boolean cancelled) {
-                this.owner = owner;
-                this.cancelled = cancelled;
-            }
+    static final class StartGenerationStatus {
+        final int owner;
+        final boolean cancelled;
+
+        StartGenerationStatus(int owner, boolean cancelled) {
+            this.owner = owner;
+            this.cancelled = cancelled;
         }
     }
 
@@ -100,6 +102,21 @@ final class TrackingOwnershipStore {
                 .putLong(PENDING_START_DEADLINE_KEY, deadlineEpochMs)
                 .apply();
         return true;
+    }
+
+    boolean queuePendingStartForReplay(long generation) {
+        if (!isPendingStartGeneration(generation) || getPendingStartPhase() != PENDING_START_PHASE_SERVICE_ACK) {
+            return false;
+        }
+        prefs.edit()
+                .putInt(PENDING_START_PHASE_KEY, PENDING_START_PHASE_QUEUED)
+                .remove(PENDING_START_DEADLINE_KEY)
+                .apply();
+        return true;
+    }
+
+    boolean isPendingStartQueuedForReplay(long generation) {
+        return isPendingStartGeneration(generation) && getPendingStartPhase() == PENDING_START_PHASE_QUEUED;
     }
 
     int getPendingStartPhase() {
@@ -246,8 +263,20 @@ final class TrackingOwnershipStore {
     }
 
     void onServiceStoppedAcknowledged() {
+        onServiceStoppedAcknowledged(true);
+    }
+
+    void onServiceStoppedAcknowledgedPreservingPendingStart() {
+        onServiceStoppedAcknowledged(false);
+    }
+
+    private void onServiceStoppedAcknowledged(boolean clearPendingStart) {
         markServiceStarted(false);
-        clearOwnerOnServiceStopped();
+        clearOwner();
+        clearPendingStopOwner();
+        if (clearPendingStart) {
+            clearPendingStartOwner();
+        }
     }
 
     void commitOwnerOnServiceStarted() {

@@ -174,4 +174,73 @@ public class TrackingLifecycleCoordinatorTest {
         Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, coordinator.getOwner());
         Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, coordinator.getPendingStopOwner());
     }
+
+    @Test
+    public void timedOutStaleStartQueuesNewerGeofenceUntilMatchingStopThenReplays() {
+        final AtomicInteger newerTimeoutCount = new AtomicInteger(0);
+        long staleGeneration = coordinator.requestStart(TrackingOwnershipStore.OWNER_GEOFENCE, 50L, null);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS);
+
+        long newerGeneration = coordinator.requestStart(TrackingOwnershipStore.OWNER_GEOFENCE, 15000L, new TrackingLifecycleCoordinator.TimeoutCallback() {
+            @Override
+            public void onTimeout(long generation) {
+                newerTimeoutCount.incrementAndGet();
+            }
+        });
+
+        TrackingLifecycleCoordinator.LifecycleActionResult staleStartResult =
+                coordinator.handleServiceLifecycleAction(LocationServiceImpl.MSG_ON_SERVICE_STARTED, staleGeneration);
+        Assert.assertTrue(staleStartResult.late);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_GEOFENCE, coordinator.getPendingStartOwner());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_GEOFENCE, coordinator.getPendingStopOwner());
+
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(16, TimeUnit.SECONDS);
+        Assert.assertEquals(0, newerTimeoutCount.get());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_GEOFENCE, coordinator.getPendingStartOwner());
+        Assert.assertEquals(newerGeneration, coordinator.getPendingStartGeneration());
+
+        TrackingLifecycleCoordinator.LifecycleActionResult staleStopResult =
+                coordinator.handleServiceLifecycleAction(LocationServiceImpl.MSG_ON_SERVICE_STOPPED, coordinator.getPendingStopGeneration());
+        Assert.assertEquals(newerGeneration, staleStopResult.replayGeneration);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_GEOFENCE, staleStopResult.replayOwner);
+
+        Assert.assertTrue(coordinator.resumeQueuedPendingStart(newerGeneration, 15000L, null));
+        TrackingLifecycleCoordinator.LifecycleActionResult committed =
+                coordinator.handleServiceLifecycleAction(LocationServiceImpl.MSG_ON_SERVICE_STARTED, newerGeneration);
+        Assert.assertEquals(newerGeneration, committed.committedGeneration);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_GEOFENCE, coordinator.getOwner());
+    }
+
+    @Test
+    public void timedOutStaleStartQueuesNewerManualUntilMatchingStopThenReplays() {
+        long staleGeneration = coordinator.requestStart(TrackingOwnershipStore.OWNER_GEOFENCE, 50L, null);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS);
+
+        long newerGeneration = coordinator.requestStart(TrackingOwnershipStore.OWNER_MANUAL, 15000L, null);
+        coordinator.handleServiceLifecycleAction(LocationServiceImpl.MSG_ON_SERVICE_STARTED, staleGeneration);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, coordinator.getPendingStartOwner());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_GEOFENCE, coordinator.getPendingStopOwner());
+
+        TrackingLifecycleCoordinator.LifecycleActionResult staleOutOfOrderStop =
+                coordinator.handleServiceLifecycleAction(LocationServiceImpl.MSG_ON_SERVICE_STOPPED, 0L);
+        Assert.assertTrue(staleOutOfOrderStop.stale);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, coordinator.getPendingStartOwner());
+
+        long stopGeneration = coordinator.getPendingStopGeneration();
+        TrackingLifecycleCoordinator.LifecycleActionResult stopResult =
+                coordinator.handleServiceLifecycleAction(LocationServiceImpl.MSG_ON_SERVICE_STOPPED, stopGeneration);
+        Assert.assertEquals(newerGeneration, stopResult.replayGeneration);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, stopResult.replayOwner);
+
+        Assert.assertTrue(coordinator.resumeQueuedPendingStart(newerGeneration, 15000L, null));
+        TrackingLifecycleCoordinator.LifecycleActionResult committed =
+                coordinator.handleServiceLifecycleAction(LocationServiceImpl.MSG_ON_SERVICE_STARTED, newerGeneration);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, committed.committedOwner);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, coordinator.getOwner());
+
+        TrackingLifecycleCoordinator.LifecycleActionResult duplicateOldStart =
+                coordinator.handleServiceLifecycleAction(LocationServiceImpl.MSG_ON_SERVICE_STARTED, staleGeneration);
+        Assert.assertTrue(duplicateOldStart.stale);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, coordinator.getOwner());
+    }
 }

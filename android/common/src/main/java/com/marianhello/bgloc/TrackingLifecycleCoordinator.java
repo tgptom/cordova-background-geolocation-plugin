@@ -23,6 +23,8 @@ final class TrackingLifecycleCoordinator {
         final long acknowledgedGeneration;
         final long committedGeneration;
         final int committedOwner;
+        final long replayGeneration;
+        final int replayOwner;
         final boolean stale;
         final boolean late;
         final boolean cancelled;
@@ -36,10 +38,36 @@ final class TrackingLifecycleCoordinator {
                 boolean late,
                 boolean cancelled
         ) {
+            this(
+                    eventAction,
+                    acknowledgedGeneration,
+                    committedGeneration,
+                    committedOwner,
+                    0L,
+                    TrackingOwnershipStore.OWNER_NONE,
+                    stale,
+                    late,
+                    cancelled
+            );
+        }
+
+        LifecycleActionResult(
+                int eventAction,
+                long acknowledgedGeneration,
+                long committedGeneration,
+                int committedOwner,
+                long replayGeneration,
+                int replayOwner,
+                boolean stale,
+                boolean late,
+                boolean cancelled
+        ) {
             this.eventAction = eventAction;
             this.acknowledgedGeneration = acknowledgedGeneration;
             this.committedGeneration = committedGeneration;
             this.committedOwner = committedOwner;
+            this.replayGeneration = replayGeneration;
+            this.replayOwner = replayOwner;
             this.stale = stale;
             this.late = late;
             this.cancelled = cancelled;
@@ -190,9 +218,25 @@ final class TrackingLifecycleCoordinator {
         return store.getPendingStopOwner();
     }
 
+    synchronized long getPendingStopGeneration() {
+        return store.getPendingStopGeneration();
+    }
+
     synchronized void clearPendingStop() {
         store.clearPendingStopOwner();
         clearStopTimeoutLocked();
+    }
+
+    synchronized boolean resumeQueuedPendingStart(long generation, long timeoutMs, TimeoutCallback onTimeout) {
+        if (!store.isPendingStartQueuedForReplay(generation)) {
+            return false;
+        }
+        boolean promoted = store.promotePendingStartToServiceAck(generation, System.currentTimeMillis() + timeoutMs);
+        if (!promoted) {
+            return false;
+        }
+        scheduleStartTimeout(generation, timeoutMs, onTimeout);
+        return true;
     }
 
     synchronized boolean isServiceStartedPersisted() {
@@ -228,17 +272,23 @@ final class TrackingLifecycleCoordinator {
             boolean stale = pendingStartOwner != TrackingOwnershipStore.OWNER_NONE;
             store.markServiceStartedAcknowledged();
 
-            if (requestGeneration != 0L
-                    && store.isTerminalStartGenerationForOwner(
-                    requestGeneration,
-                    TrackingOwnershipStore.OWNER_GEOFENCE
-            )) {
-                TrackingOwnershipStore.StartGenerationStatus status =
-                        store.getStartGenerationStatus(requestGeneration);
+            TrackingOwnershipStore.StartGenerationStatus status =
+                    requestGeneration == 0L ? null : store.getStartGenerationStatus(requestGeneration);
+            if (status != null) {
                 boolean cancelled = status != null && status.cancelled;
-                boolean shouldStop = shouldIssueOrderlyStopForLateStart();
+                long replayGeneration = 0L;
+                int replayOwner = TrackingOwnershipStore.OWNER_NONE;
+                if (pendingStartOwner != TrackingOwnershipStore.OWNER_NONE
+                        && pendingStartGeneration != 0L
+                        && pendingStartGeneration != requestGeneration
+                        && store.queuePendingStartForReplay(pendingStartGeneration)) {
+                    replayGeneration = pendingStartGeneration;
+                    replayOwner = pendingStartOwner;
+                    clearStartTimeoutLocked();
+                }
+                boolean shouldStop = shouldIssueOrderlyStopForLateStart(replayGeneration != 0L);
                 if (shouldStop) {
-                    long stopGeneration = requestStop(TrackingOwnershipStore.OWNER_GEOFENCE, DEFAULT_ACK_TIMEOUT_MS, null);
+                    long stopGeneration = requestStop(status.owner, DEFAULT_ACK_TIMEOUT_MS, null);
                     try {
                         serviceProxy.stop(stopGeneration);
                     } catch (RuntimeException ignored) {
@@ -249,6 +299,8 @@ final class TrackingLifecycleCoordinator {
                 return new LifecycleActionResult(
                         action,
                         requestGeneration,
+                        0L,
+                        TrackingOwnershipStore.OWNER_NONE,
                         0L,
                         TrackingOwnershipStore.OWNER_NONE,
                         true,
@@ -276,12 +328,27 @@ final class TrackingLifecycleCoordinator {
             if (pendingStopOwner != TrackingOwnershipStore.OWNER_NONE
                     && requestGeneration != 0L
                     && requestGeneration == pendingStopGeneration) {
-                clearOwnerOnServiceStopped();
+                long replayGeneration = 0L;
+                int replayOwner = TrackingOwnershipStore.OWNER_NONE;
+                int pendingStartOwner = store.getPendingStartOwner();
+                long pendingStartGeneration = store.getPendingStartGeneration();
+                if (pendingStartOwner != TrackingOwnershipStore.OWNER_NONE
+                        && pendingStartGeneration != 0L
+                        && store.isPendingStartQueuedForReplay(pendingStartGeneration)) {
+                    replayGeneration = pendingStartGeneration;
+                    replayOwner = pendingStartOwner;
+                    store.onServiceStoppedAcknowledgedPreservingPendingStart();
+                    clearStopTimeoutLocked();
+                } else {
+                    clearOwnerOnServiceStopped();
+                }
                 return new LifecycleActionResult(
                         action,
                         requestGeneration,
                         requestGeneration,
                         pendingStopOwner,
+                        replayGeneration,
+                        replayOwner,
                         false,
                         false,
                         false
@@ -321,11 +388,15 @@ final class TrackingLifecycleCoordinator {
     }
 
     private boolean shouldIssueOrderlyStopForLateStart() {
+        return shouldIssueOrderlyStopForLateStart(false);
+    }
+
+    private boolean shouldIssueOrderlyStopForLateStart(boolean allowQueuedPendingStart) {
         TrackingOwnershipStore.ReconciledState state = store.reconcileWithServiceState(true, System.currentTimeMillis());
         return state.serviceStarted
-                && state.pendingStartOwner == TrackingOwnershipStore.OWNER_NONE
                 && state.pendingStopOwner == TrackingOwnershipStore.OWNER_NONE
-                && state.owner == TrackingOwnershipStore.OWNER_NONE;
+                && state.owner == TrackingOwnershipStore.OWNER_NONE
+                && (allowQueuedPendingStart || state.pendingStartOwner == TrackingOwnershipStore.OWNER_NONE);
     }
 
     private void ensureReceiverRegistered() {

@@ -516,7 +516,7 @@ export interface BackgroundGeolocationPlugin {
   /**
    * Start background geolocation for companion geofence transition integration.
    * This does not register geofences by itself.
-   * Compatible with tgptom/cordova-plugin-geofence PR #8 transition contract.
+   * Compatible with tgptom/cordova-plugin-geofence PR #9 hardened transition contract and future compatible releases.
    * Platform: iOS, Android
    */
   startForGeofence(): Promise<void>;

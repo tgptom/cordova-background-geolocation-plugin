@@ -69,6 +69,20 @@ public class GeofenceOwnershipEvaluatorTest {
                 TrackingOwnershipStore.OWNER_MANUAL
         );
 
+        Assert.assertFalse(result.shouldStart);
+        Assert.assertFalse(result.shouldStop);
+        Assert.assertFalse(result.shouldClearOwner);
+    }
+
+    @Test
+    public void staleGeofenceOwnerIsClearedAfterProcessRestart() {
+        GeofenceOwnershipEvaluator.Result result = GeofenceOwnershipEvaluator.evaluate(
+                GeofenceOwnershipEvaluator.TRANSITION_ENTER,
+                true,
+                false,
+                TrackingOwnershipStore.OWNER_GEOFENCE
+        );
+
         Assert.assertTrue(result.shouldStart);
         Assert.assertFalse(result.shouldStop);
         Assert.assertTrue(result.shouldClearOwner);

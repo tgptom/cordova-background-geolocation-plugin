@@ -97,6 +97,24 @@ Then call `start()` to start location tracking.
 
 A more comprehensive example can be found in the [Documentation](https://haylltd.github.io/cordova-background-geolocation-plugin/example)
 
+### Companion geofence integration (`startForGeofence`)
+
+`startForGeofence()` is intended for integration with a companion geofence plugin transition pipeline (currently aligned with `tgptom/cordova-plugin-geofence` PR #11 or successor hardened transition contract). It starts precise background tracking when the companion plugin signals geofence entry/dwell transitions.
+
+This plugin does **not** register geofences. Keep using a geofence plugin to create/remove monitored regions.
+
+#### Companion protocol contract
+- Android callback: `com.marianhello.bgloc.GeofenceTransitionHandler.onGeofenceTransition(Context,int,boolean)`
+- iOS notification: `PAPAGeofenceTrackingTransition` with payload keys:
+  - `transitionType` (`1` enter, `2` exit, `4` dwell)
+  - `hasActiveInsideGeofence` (`Boolean`, true when at least one active geofence is still inside)
+
+#### Migration and store-safety notes
+- iOS: set meaningful app-specific `ALWAYS_USAGE_DESCRIPTION` / location purpose strings.
+- Android: ensure foreground-service declarations and user-visible location notification are correctly configured.
+- Android: physical-device validation is still required for modern background-start and foreground-service policy behavior.
+- App UX/policy: provide explicit user controls and disclosures for background tracking, and document how geofence transitions start/stop precise tracking.
+
 ### Compatibility
 
 | Plugin version   | Cordova CLI       | Cordova Platform Android | Cordova Platform iOS |

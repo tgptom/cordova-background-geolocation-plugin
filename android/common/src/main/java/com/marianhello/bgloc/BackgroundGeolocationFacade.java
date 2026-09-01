@@ -12,8 +12,6 @@ import android.location.Location;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import androidx.core.content.ContextCompat;
@@ -64,17 +62,16 @@ public class BackgroundGeolocationFacade {
     private boolean mLocationModeChangeReceiverRegistered = false;
     private boolean mIsPaused = false;
     private static final long START_ACK_TIMEOUT_MS = 15000L;
+    private static final long STOP_ACK_TIMEOUT_MS = 15000L;
 
     private Config mConfig;
     private final Context mContext;
     private final PluginDelegate mDelegate;
     private final LocationService mService;
-    private final TrackingOwnershipStore mTrackingOwnershipStore;
+    private final TrackingLifecycleCoordinator mLifecycleCoordinator;
 
     private BackgroundLocation mStationaryLocation;
-    private final Handler mMainThreadHandler = new Handler(Looper.getMainLooper());
     private StartRequestCallback mPendingGeofenceStartCallback;
-    private Runnable mPendingGeofenceStartTimeout;
 
     private org.slf4j.Logger logger;
 
@@ -87,7 +84,7 @@ public class BackgroundGeolocationFacade {
         mContext = context;
         mDelegate = delegate;
         mService = new LocationServiceProxy(context);
-        mTrackingOwnershipStore = new TrackingOwnershipStore(context);
+        mLifecycleCoordinator = TrackingLifecycleCoordinator.getInstance(context);
 
         UncaughtExceptionLogger.register(context.getApplicationContext());
 
@@ -103,7 +100,9 @@ public class BackgroundGeolocationFacade {
         @Override
         public void onReceive(Context context, Intent intent) {
             logger.debug("Authorization has changed");
-            mDelegate.onAuthorizationChanged(getAuthorizationStatus());
+            if (mDelegate != null) {
+                mDelegate.onAuthorizationChanged(getAuthorizationStatus());
+            }
         }
     };
 
@@ -111,6 +110,9 @@ public class BackgroundGeolocationFacade {
         @Override
         public void onReceive(Context context, Intent intent) {
             Bundle bundle = intent.getExtras();
+            if (bundle == null) {
+                return;
+            }
             int action = bundle.getInt("action");
 
             switch (action) {
@@ -118,7 +120,9 @@ public class BackgroundGeolocationFacade {
                     logger.debug("Received MSG_ON_LOCATION");
                     bundle.setClassLoader(LocationServiceImpl.class.getClassLoader());
                     BackgroundLocation location = (BackgroundLocation) bundle.getParcelable("payload");
-                    mDelegate.onLocationChanged(location);
+                    if (mDelegate != null) {
+                        mDelegate.onLocationChanged(location);
+                    }
                     return;
                 }
 
@@ -127,7 +131,9 @@ public class BackgroundGeolocationFacade {
                     bundle.setClassLoader(LocationServiceImpl.class.getClassLoader());
                     BackgroundLocation location = (BackgroundLocation) bundle.getParcelable("payload");
                     mStationaryLocation = location;
-                    mDelegate.onStationaryChanged(location);
+                    if (mDelegate != null) {
+                        mDelegate.onStationaryChanged(location);
+                    }
                     return;
                 }
 
@@ -135,7 +141,9 @@ public class BackgroundGeolocationFacade {
                     logger.debug("Received MSG_ON_ACTIVITY");
                     bundle.setClassLoader(LocationServiceImpl.class.getClassLoader());
                     BackgroundActivity activity = (BackgroundActivity) bundle.getParcelable("payload");
-                    mDelegate.onActivityChanged(activity);
+                    if (mDelegate != null) {
+                        mDelegate.onActivityChanged(activity);
+                    }
                     return;
                 }
 
@@ -144,22 +152,28 @@ public class BackgroundGeolocationFacade {
                     Bundle errorBundle = bundle.getBundle("payload");
                     Integer errorCode = errorBundle.getInt("code");
                     String errorMessage = errorBundle.getString("message");
-                    mDelegate.onError(new PluginException(errorMessage, errorCode));
+                    if (mDelegate != null) {
+                        mDelegate.onError(new PluginException(errorMessage, errorCode));
+                    }
                     return;
                 }
 
                 case LocationServiceImpl.MSG_ON_SERVICE_STARTED: {
                     logger.debug("Received MSG_ON_SERVICE_STARTED");
-                    mTrackingOwnershipStore.commitOwnerOnServiceStarted();
+                    mLifecycleCoordinator.handleServiceLifecycleAction(action);
                     resolvePendingGeofenceStartSuccess();
-                    mDelegate.onServiceStatusChanged(SERVICE_STARTED);
+                    if (mDelegate != null) {
+                        mDelegate.onServiceStatusChanged(SERVICE_STARTED);
+                    }
                     return;
                 }
 
                 case LocationServiceImpl.MSG_ON_SERVICE_STOPPED: {
                     logger.debug("Received MSG_ON_SERVICE_STOPPED");
-                    mTrackingOwnershipStore.clearOwnerOnServiceStopped();
-                    mDelegate.onServiceStatusChanged(SERVICE_STOPPED);
+                    mLifecycleCoordinator.handleServiceLifecycleAction(action);
+                    if (mDelegate != null) {
+                        mDelegate.onServiceStatusChanged(SERVICE_STOPPED);
+                    }
                     return;
                 }
 
@@ -229,33 +243,27 @@ public class BackgroundGeolocationFacade {
     }
 
     public void start() {
-        mTrackingOwnershipStore.reconcileWithServiceState(mService.isStarted());
+        mLifecycleCoordinator.reconcileState();
         startInternal(TrackingOwnershipStore.OWNER_MANUAL, false, null);
     }
 
     public void startForGeofence(StartRequestCallback callback) {
-        if (callback == null) {
-            callback = new StartRequestCallback() {
-                @Override
-                public void onSuccess() {}
-
-                @Override
-                public void onError(PluginException exception) {}
-            };
-        }
-        boolean serviceStarted = mService.isStarted();
-        int owner = mTrackingOwnershipStore.reconcileWithServiceState(serviceStarted);
-        if (mTrackingOwnershipStore.getPendingStartOwner() == TrackingOwnershipStore.OWNER_GEOFENCE) {
-            callback.onError(new PluginException(
-                    "Geofence start request is already pending.",
-                    PluginException.START_FAILED_ERROR
-            ));
+        TrackingOwnershipStore.ReconciledState state = mLifecycleCoordinator.reconcileState();
+        if (state.pendingStartOwner == TrackingOwnershipStore.OWNER_GEOFENCE) {
+            if (callback != null) {
+                callback.onError(new PluginException(
+                        "Geofence start request is already pending.",
+                        PluginException.START_FAILED_ERROR
+                ));
+            }
             return;
         }
-        if ((serviceStarted && owner == TrackingOwnershipStore.OWNER_MANUAL)
-                || mTrackingOwnershipStore.getPendingStartOwner() == TrackingOwnershipStore.OWNER_MANUAL) {
+        if ((state.serviceStarted && state.owner == TrackingOwnershipStore.OWNER_MANUAL)
+                || state.pendingStartOwner == TrackingOwnershipStore.OWNER_MANUAL) {
             logger.info("Ignoring geofence start because manual tracking owner is active");
-            callback.onError(new PluginException("Tracking already started manually.", PluginException.OWNERSHIP_CONFLICT_ERROR));
+            if (callback != null) {
+                callback.onError(new PluginException("Tracking already started manually.", PluginException.OWNERSHIP_CONFLICT_ERROR));
+            }
             return;
         }
         startInternal(TrackingOwnershipStore.OWNER_GEOFENCE, true, callback);
@@ -265,7 +273,17 @@ public class BackgroundGeolocationFacade {
                                final boolean requireGeofenceConfig,
                                final StartRequestCallback geofenceCallback) {
         logger.debug("Starting service");
-        mTrackingOwnershipStore.setPendingStartOwner(requestedOwner);
+        final long pendingGeneration = mLifecycleCoordinator.requestStart(requestedOwner, START_ACK_TIMEOUT_MS, new TrackingLifecycleCoordinator.TimeoutCallback() {
+            @Override
+            public void onTimeout(long generation) {
+                if (requestedOwner == TrackingOwnershipStore.OWNER_GEOFENCE) {
+                    notifyGeofenceStartError(new PluginException(
+                            "Unable to start geofence-owned background geolocation.",
+                            PluginException.START_FAILED_ERROR
+                    ));
+                }
+            }
+        });
         if (requestedOwner == TrackingOwnershipStore.OWNER_GEOFENCE) {
             setPendingGeofenceStartCallback(geofenceCallback);
         }
@@ -285,10 +303,12 @@ public class BackgroundGeolocationFacade {
 
                 // watch location mode changes
                 registerLocationModeChangeReceiver();
-                registerServiceBroadcast();
+                if (mDelegate != null || geofenceCallback != null) {
+                    registerServiceBroadcast();
+                }
 
                 if (requireGeofenceConfig && !isGeofenceStartConfigurationValid()) {
-                    clearPendingStartRequest();
+                    clearPendingStartRequest(pendingGeneration);
                     notifyGeofenceStartError(new PluginException(
                             "Unable to start geofence-owned background geolocation due to invalid configuration.",
                             PluginException.START_FAILED_ERROR
@@ -298,23 +318,22 @@ public class BackgroundGeolocationFacade {
 
                 try {
                     startBackgroundService();
-                    scheduleStartTimeoutIfNeeded();
                 } catch (SecurityException e) {
-                    clearPendingStartRequest();
+                    clearPendingStartRequest(pendingGeneration);
                     notifyGeofenceStartError(new PluginException(
                             "Unable to start geofence-owned background geolocation due to missing permission.",
                             e,
                             PluginException.START_FAILED_ERROR
                     ));
                 } catch (IllegalStateException e) {
-                    clearPendingStartRequest();
+                    clearPendingStartRequest(pendingGeneration);
                     notifyGeofenceStartError(new PluginException(
                             "Unable to start geofence-owned background geolocation due to foreground-service restrictions.",
                             e,
                             PluginException.START_FAILED_ERROR
                     ));
                 } catch (RuntimeException e) {
-                    clearPendingStartRequest();
+                    clearPendingStartRequest(pendingGeneration);
                     notifyGeofenceStartError(new PluginException(
                             "Unable to start geofence-owned background geolocation.",
                             e,
@@ -326,7 +345,7 @@ public class BackgroundGeolocationFacade {
             @Override
             public void onPermissionDenied(DeniedPermissions deniedPermissions) {
                 logger.info("User denied requested permissions");
-                clearPendingStartRequest();
+                clearPendingStartRequest(pendingGeneration);
                 notifyGeofenceStartError(new PluginException("Permission denied", PluginException.PERMISSION_DENIED_ERROR));
                 if (mDelegate != null) {
                     mDelegate.onAuthorizationChanged(BackgroundGeolocationFacade.AUTHORIZATION_DENIED);
@@ -342,11 +361,11 @@ public class BackgroundGeolocationFacade {
         // because no stop notification from service will arrive
         // unregisterServiceBroadcast();
 
-        int owner = mTrackingOwnershipStore.reconcileWithServiceState(mService.isStarted());
-        if (owner != TrackingOwnershipStore.OWNER_NONE) {
-            mTrackingOwnershipStore.setPendingStopOwner(owner);
+        TrackingOwnershipStore.ReconciledState state = mLifecycleCoordinator.reconcileState();
+        if (state.owner != TrackingOwnershipStore.OWNER_NONE) {
+            mLifecycleCoordinator.requestStop(state.owner, STOP_ACK_TIMEOUT_MS, null);
         }
-        if (mTrackingOwnershipStore.getPendingStartOwner() == TrackingOwnershipStore.OWNER_GEOFENCE) {
+        if (state.pendingStartOwner == TrackingOwnershipStore.OWNER_GEOFENCE) {
             notifyGeofenceStartError(new PluginException(
                     "Unable to start geofence-owned background geolocation.",
                     PluginException.START_FAILED_ERROR
@@ -578,46 +597,17 @@ public class BackgroundGeolocationFacade {
         mPendingGeofenceStartCallback = callback;
     }
 
+    private synchronized void clearPendingStartRequest(long generation) {
+        mLifecycleCoordinator.clearPendingStart(generation);
+    }
+
     private synchronized void clearPendingStartRequest() {
-        mTrackingOwnershipStore.clearPendingStartOwner();
-        clearPendingGeofenceStartTimeoutLocked();
-    }
-
-    private synchronized void scheduleStartTimeoutIfNeeded() {
-        if (mTrackingOwnershipStore.getPendingStartOwner() != TrackingOwnershipStore.OWNER_GEOFENCE
-                || mPendingGeofenceStartCallback == null) {
-            return;
-        }
-        clearPendingGeofenceStartTimeoutLocked();
-        mPendingGeofenceStartTimeout = new Runnable() {
-            @Override
-            public void run() {
-                synchronized (BackgroundGeolocationFacade.this) {
-                    if (mTrackingOwnershipStore.getPendingStartOwner() != TrackingOwnershipStore.OWNER_GEOFENCE) {
-                        return;
-                    }
-                    mTrackingOwnershipStore.clearPendingStartOwner();
-                }
-                notifyGeofenceStartError(new PluginException(
-                        "Unable to start geofence-owned background geolocation.",
-                        PluginException.START_FAILED_ERROR
-                ));
-            }
-        };
-        mMainThreadHandler.postDelayed(mPendingGeofenceStartTimeout, START_ACK_TIMEOUT_MS);
-    }
-
-    private synchronized void clearPendingGeofenceStartTimeoutLocked() {
-        if (mPendingGeofenceStartTimeout != null) {
-            mMainThreadHandler.removeCallbacks(mPendingGeofenceStartTimeout);
-            mPendingGeofenceStartTimeout = null;
-        }
+        mLifecycleCoordinator.clearPendingStart();
     }
 
     private void resolvePendingGeofenceStartSuccess() {
         StartRequestCallback callback;
         synchronized (this) {
-            clearPendingGeofenceStartTimeoutLocked();
             callback = mPendingGeofenceStartCallback;
             mPendingGeofenceStartCallback = null;
         }
@@ -629,7 +619,6 @@ public class BackgroundGeolocationFacade {
     private void notifyGeofenceStartError(PluginException exception) {
         StartRequestCallback callback;
         synchronized (this) {
-            clearPendingGeofenceStartTimeoutLocked();
             callback = mPendingGeofenceStartCallback;
             mPendingGeofenceStartCallback = null;
         }

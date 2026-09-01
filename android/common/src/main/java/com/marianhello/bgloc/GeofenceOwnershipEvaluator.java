@@ -20,8 +20,9 @@ final class GeofenceOwnershipEvaluator {
     private GeofenceOwnershipEvaluator() {}
 
     static Result evaluate(int transitionType, boolean hasActiveInsideGeofence,
-                           boolean serviceStarted, int owner) {
+                           boolean serviceStarted, int owner, int pendingStartOwner) {
         int normalizedOwner = normalizeOwner(owner);
+        int normalizedPendingStartOwner = normalizeOwner(pendingStartOwner);
         boolean shouldClearOwner = !serviceStarted && normalizedOwner == TrackingOwnershipStore.OWNER_GEOFENCE;
         int reconciledOwner = shouldClearOwner ? TrackingOwnershipStore.OWNER_NONE : normalizedOwner;
 
@@ -35,7 +36,8 @@ final class GeofenceOwnershipEvaluator {
         if (transitionType == TRANSITION_ENTER || transitionType == TRANSITION_DWELL) {
             boolean shouldStart = hasActiveInsideGeofence
                     && !serviceStarted
-                    && reconciledOwner != TrackingOwnershipStore.OWNER_MANUAL;
+                    && reconciledOwner != TrackingOwnershipStore.OWNER_MANUAL
+                    && normalizedPendingStartOwner == TrackingOwnershipStore.OWNER_NONE;
             return new Result(shouldStart, false, shouldClearOwner);
         }
 

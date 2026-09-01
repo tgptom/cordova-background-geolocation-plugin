@@ -119,6 +119,10 @@ final class TrackingOwnershipStore {
         return isPendingStartGeneration(generation) && getPendingStartPhase() == PENDING_START_PHASE_QUEUED;
     }
 
+    boolean isPendingStartAwaitingServiceAck(long generation) {
+        return isPendingStartGeneration(generation) && getPendingStartPhase() == PENDING_START_PHASE_SERVICE_ACK;
+    }
+
     int getPendingStartPhase() {
         return prefs.getInt(PENDING_START_PHASE_KEY, PENDING_START_PHASE_NONE);
     }

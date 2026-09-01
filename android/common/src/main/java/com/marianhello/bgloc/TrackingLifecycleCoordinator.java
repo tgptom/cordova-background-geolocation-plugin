@@ -13,6 +13,9 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import com.marianhello.bgloc.service.LocationServiceImpl;
 import com.marianhello.bgloc.service.LocationServiceProxy;
 
+import java.util.HashMap;
+import java.util.Map;
+
 final class TrackingLifecycleCoordinator {
     interface TimeoutCallback {
         void onTimeout(long generation);
@@ -76,6 +79,7 @@ final class TrackingLifecycleCoordinator {
 
     private static final Object LOCK = new Object();
     private static final long DEFAULT_ACK_TIMEOUT_MS = 15000L;
+    private static final int STOP_TIMEOUT_MAX_RETRIES = 1;
 
     private static TrackingLifecycleCoordinator sInstance;
 
@@ -93,6 +97,8 @@ final class TrackingLifecycleCoordinator {
     private final LocationServiceProxy serviceProxy;
     private final LocalBroadcastManager localBroadcastManager;
     private final Handler handler;
+    private final Map<Long, TimeoutCallback> startTimeoutCallbacks = new HashMap<>();
+    private final Map<Long, Integer> stopTimeoutRetries = new HashMap<>();
 
     private boolean receiverRegistered = false;
     private Runnable pendingStartTimeout;
@@ -112,20 +118,65 @@ final class TrackingLifecycleCoordinator {
     };
 
     private TrackingLifecycleCoordinator(Context context) {
+        this(
+                context,
+                new TrackingOwnershipStore(context),
+                new LocationServiceProxy(context),
+                LocalBroadcastManager.getInstance(context),
+                new Handler(Looper.getMainLooper())
+        );
+    }
+
+    TrackingLifecycleCoordinator(
+            Context context,
+            TrackingOwnershipStore store,
+            LocationServiceProxy serviceProxy,
+            LocalBroadcastManager localBroadcastManager,
+            Handler handler
+    ) {
         this.context = context;
-        this.store = new TrackingOwnershipStore(context);
-        this.serviceProxy = new LocationServiceProxy(context);
-        this.localBroadcastManager = LocalBroadcastManager.getInstance(context);
-        this.handler = new Handler(Looper.getMainLooper());
+        this.store = store;
+        this.serviceProxy = serviceProxy;
+        this.localBroadcastManager = localBroadcastManager;
+        this.handler = handler;
     }
 
     synchronized TrackingOwnershipStore.ReconciledState reconcileState() {
-        return store.reconcileWithServiceState(serviceProxy.isStarted(), System.currentTimeMillis());
+        ensureReceiverRegistered();
+        TrackingOwnershipStore.ReconciledState state = store.reconcileWithServiceState(
+                serviceProxy.isStarted(),
+                System.currentTimeMillis()
+        );
+        if (!state.serviceStarted) {
+            long pendingStopGeneration = store.getPendingStopGeneration();
+            if (pendingStopGeneration != 0L && store.getPendingStopOwner() != TrackingOwnershipStore.OWNER_NONE) {
+                handleServiceLifecycleAction(LocationServiceImpl.MSG_ON_SERVICE_STOPPED, pendingStopGeneration);
+                state = store.reconcileWithServiceState(serviceProxy.isStarted(), System.currentTimeMillis());
+            } else {
+                long pendingStartGeneration = store.getPendingStartGeneration();
+                int pendingStartOwner = store.getPendingStartOwner();
+                if (pendingStartOwner != TrackingOwnershipStore.OWNER_NONE
+                        && pendingStartGeneration != 0L
+                        && store.isPendingStartQueuedForReplay(pendingStartGeneration)) {
+                    replayQueuedPendingStartLocked(pendingStartGeneration, pendingStartOwner);
+                    state = store.reconcileWithServiceState(serviceProxy.isStarted(), System.currentTimeMillis());
+                } else if (pendingStartOwner != TrackingOwnershipStore.OWNER_NONE
+                        && pendingStartGeneration != 0L
+                        && store.isPendingStartAwaitingServiceAck(pendingStartGeneration)) {
+                    dispatchPendingStartAwaitingServiceAckLocked(pendingStartGeneration, pendingStartOwner);
+                    state = store.reconcileWithServiceState(serviceProxy.isStarted(), System.currentTimeMillis());
+                }
+            }
+        }
+        return state;
     }
 
     synchronized long requestStart(int owner, long timeoutMs, TimeoutCallback onTimeout) {
         ensureReceiverRegistered();
         long generation = store.setPendingStartOwner(owner, System.currentTimeMillis() + timeoutMs);
+        if (generation != 0L) {
+            putStartTimeoutCallback(generation, onTimeout);
+        }
         scheduleStartTimeout(generation, timeoutMs, onTimeout);
         return generation;
     }
@@ -158,10 +209,12 @@ final class TrackingLifecycleCoordinator {
             store.markFailedStart(generation, pendingOwner);
         }
         store.clearPendingStartOwnerIfGeneration(generation);
+        clearStartTimeoutCallback(generation);
     }
 
     synchronized void clearPendingStartRequestOnly(long generation) {
         store.clearPendingStartOwnerIfGeneration(generation);
+        clearStartTimeoutCallback(generation);
     }
 
     synchronized void clearPendingStart() {
@@ -171,6 +224,7 @@ final class TrackingLifecycleCoordinator {
             store.markFailedStart(pendingGeneration, pendingOwner);
         }
         store.clearPendingStartOwner();
+        clearStartTimeoutCallback(pendingGeneration);
         clearStartTimeoutLocked();
     }
 
@@ -181,11 +235,13 @@ final class TrackingLifecycleCoordinator {
             store.markCancelledStart(pendingGeneration, pendingOwner);
         }
         store.clearPendingStartOwner();
+        clearStartTimeoutCallback(pendingGeneration);
         clearStartTimeoutLocked();
     }
 
     synchronized void clearPendingStop(long generation) {
         store.clearPendingStopOwnerIfGeneration(generation);
+        stopTimeoutRetries.remove(generation);
     }
 
     synchronized void commitOwnerOnServiceStarted() {
@@ -195,6 +251,7 @@ final class TrackingLifecycleCoordinator {
 
     synchronized void clearOwnerOnServiceStopped() {
         store.onServiceStoppedAcknowledged();
+        stopTimeoutRetries.clear();
         clearStopTimeoutLocked();
     }
 
@@ -223,7 +280,9 @@ final class TrackingLifecycleCoordinator {
     }
 
     synchronized void clearPendingStop() {
+        long pendingGeneration = store.getPendingStopGeneration();
         store.clearPendingStopOwner();
+        stopTimeoutRetries.remove(pendingGeneration);
         clearStopTimeoutLocked();
     }
 
@@ -235,12 +294,17 @@ final class TrackingLifecycleCoordinator {
         if (!promoted) {
             return false;
         }
+        putStartTimeoutCallback(generation, onTimeout);
         scheduleStartTimeout(generation, timeoutMs, onTimeout);
         return true;
     }
 
     synchronized boolean isServiceStartedPersisted() {
         return store.isServiceStartedPersisted();
+    }
+
+    synchronized boolean isTerminalStartGenerationForOwner(long generation, int owner) {
+        return store.isTerminalStartGenerationForOwner(generation, owner);
     }
 
     synchronized LifecycleActionResult handleServiceLifecycleAction(int action) {
@@ -257,6 +321,7 @@ final class TrackingLifecycleCoordinator {
                     && requestGeneration == pendingStartGeneration) {
                 store.onServiceStartedAcknowledged();
                 store.clearFailedStartOwnerIfGeneration(requestGeneration);
+                clearStartTimeoutCallback(requestGeneration);
                 clearStartTimeoutLocked();
                 return new LifecycleActionResult(
                         action,
@@ -338,7 +403,9 @@ final class TrackingLifecycleCoordinator {
                     replayGeneration = pendingStartGeneration;
                     replayOwner = pendingStartOwner;
                     store.onServiceStoppedAcknowledgedPreservingPendingStart();
+                    stopTimeoutRetries.remove(requestGeneration);
                     clearStopTimeoutLocked();
+                    replayQueuedPendingStartLocked(replayGeneration, replayOwner);
                 } else {
                     clearOwnerOnServiceStopped();
                 }
@@ -426,6 +493,7 @@ final class TrackingLifecycleCoordinator {
                     if (store.isPendingStartGeneration(generation)) {
                         store.markFailedStart(generation, store.getPendingStartOwner());
                         store.clearPendingStartOwnerIfGeneration(generation);
+                        clearStartTimeoutCallback(generation);
                         shouldNotify = true;
                     }
                 }
@@ -456,9 +524,41 @@ final class TrackingLifecycleCoordinator {
 
                     if (store.isPendingStopGeneration(generation)) {
                         if (!state.serviceStarted) {
-                            store.clearOwnerOnServiceStopped();
+                            int pendingStartOwner = store.getPendingStartOwner();
+                            long pendingStartGeneration = store.getPendingStartGeneration();
+                            boolean hasReplayCandidate = pendingStartOwner != TrackingOwnershipStore.OWNER_NONE
+                                    && pendingStartGeneration != 0L;
+                            boolean queuedForReplay = hasReplayCandidate
+                                    && store.isPendingStartQueuedForReplay(pendingStartGeneration);
+                            if (queuedForReplay) {
+                                store.onServiceStoppedAcknowledgedPreservingPendingStart();
+                                stopTimeoutRetries.remove(generation);
+                                clearStopTimeoutLocked();
+                                replayQueuedPendingStartLocked(pendingStartGeneration, pendingStartOwner);
+                            } else {
+                                store.clearOwnerOnServiceStopped();
+                                stopTimeoutRetries.remove(generation);
+                            }
                         } else {
+                            int retryCount = getStopRetryCount(generation);
+                            if (retryCount < STOP_TIMEOUT_MAX_RETRIES) {
+                                stopTimeoutRetries.put(generation, retryCount + 1);
+                                try {
+                                    serviceProxy.stop(generation);
+                                } catch (RuntimeException ignored) {
+                                    // keep pending stop state; retry/failure path remains deterministic
+                                }
+                                scheduleStopTimeout(generation, timeoutMs, callback);
+                                return;
+                            }
+                            int pendingStopOwner = store.getPendingStopOwner();
+                            if (store.getOwner() == TrackingOwnershipStore.OWNER_NONE
+                                    && pendingStopOwner != TrackingOwnershipStore.OWNER_NONE) {
+                                store.setOwner(pendingStopOwner);
+                            }
+                            failQueuedPendingStartLocked();
                             store.clearPendingStopOwnerIfGeneration(generation);
+                            stopTimeoutRetries.remove(generation);
                             shouldNotify = true;
                         }
                     }
@@ -484,5 +584,97 @@ final class TrackingLifecycleCoordinator {
             handler.removeCallbacks(pendingStopTimeout);
             pendingStopTimeout = null;
         }
+    }
+
+    private void replayQueuedPendingStartLocked(long replayGeneration, int replayOwner) {
+        TimeoutCallback timeoutCallback = getStartTimeoutCallback(replayGeneration);
+        boolean resumed = resumeQueuedPendingStart(replayGeneration, DEFAULT_ACK_TIMEOUT_MS, timeoutCallback);
+        if (!resumed) {
+            failQueuedPendingStartLocked();
+            return;
+        }
+        dispatchStartForOwnerLocked(replayOwner, replayGeneration, true);
+    }
+
+    private void failQueuedPendingStartLocked() {
+        long pendingStartGeneration = store.getPendingStartGeneration();
+        int pendingStartOwner = store.getPendingStartOwner();
+        if (pendingStartOwner == TrackingOwnershipStore.OWNER_NONE || pendingStartGeneration == 0L) {
+            return;
+        }
+        store.markFailedStart(pendingStartGeneration, pendingStartOwner);
+        store.clearPendingStartOwnerIfGeneration(pendingStartGeneration);
+        notifyStartFailureLocked(pendingStartGeneration);
+    }
+
+    private void notifyStartFailureLocked(long generation) {
+        TimeoutCallback callback = getStartTimeoutCallback(generation);
+        if (callback != null) {
+            callback.onTimeout(generation);
+        }
+        clearStartTimeoutCallback(generation);
+    }
+
+    private void dispatchPendingStartAwaitingServiceAckLocked(long generation, int owner) {
+        scheduleStartTimeout(generation, DEFAULT_ACK_TIMEOUT_MS, getStartTimeoutCallback(generation));
+        dispatchStartForOwnerLocked(owner, generation, false);
+    }
+
+    private void dispatchStartForOwnerLocked(int owner, long generation, boolean failQueuedOnDispatchError) {
+        try {
+            if (owner == TrackingOwnershipStore.OWNER_GEOFENCE) {
+                serviceProxy.startForegroundService(generation);
+            } else {
+                serviceProxy.start(generation);
+            }
+        } catch (RuntimeException e) {
+            if (failQueuedOnDispatchError) {
+                failQueuedPendingStartLocked();
+                return;
+            }
+            failPendingStartGenerationLocked(generation);
+        }
+    }
+
+    private TimeoutCallback getStartTimeoutCallback(long generation) {
+        if (generation == 0L) {
+            return null;
+        }
+        return startTimeoutCallbacks.get(generation);
+    }
+
+    private void putStartTimeoutCallback(long generation, TimeoutCallback callback) {
+        if (generation == 0L) {
+            return;
+        }
+        if (callback == null) {
+            startTimeoutCallbacks.remove(generation);
+        } else {
+            startTimeoutCallbacks.put(generation, callback);
+        }
+    }
+
+    private void clearStartTimeoutCallback(long generation) {
+        if (generation == 0L) {
+            return;
+        }
+        startTimeoutCallbacks.remove(generation);
+    }
+
+    private int getStopRetryCount(long generation) {
+        Integer count = stopTimeoutRetries.get(generation);
+        return count == null ? 0 : count.intValue();
+    }
+
+    private void failPendingStartGenerationLocked(long generation) {
+        if (!store.isPendingStartGeneration(generation)) {
+            return;
+        }
+        int pendingOwner = store.getPendingStartOwner();
+        if (pendingOwner != TrackingOwnershipStore.OWNER_NONE) {
+            store.markFailedStart(generation, pendingOwner);
+        }
+        store.clearPendingStartOwnerIfGeneration(generation);
+        notifyStartFailureLocked(generation);
     }
 }

@@ -166,6 +166,41 @@ public class BackgroundGeolocationFacadeCallbackTest {
         Assert.assertEquals(1, errorCount.get());
     }
 
+    @Test
+    public void terminalQueuedReplayFailureResolvesPendingGeofenceCallbackOnce() throws Exception {
+        final AtomicInteger successCount = new AtomicInteger(0);
+        final AtomicInteger errorCount = new AtomicInteger(0);
+        TrackingLifecycleCoordinator coordinator =
+                TrackingLifecycleCoordinator.getInstance(RuntimeEnvironment.application.getApplicationContext());
+        long generation = coordinator.requestStart(TrackingOwnershipStore.OWNER_GEOFENCE, 15000L, null);
+        coordinator.clearPendingStart(generation);
+
+        BackgroundGeolocationFacade.StartRequestCallback callback = new BackgroundGeolocationFacade.StartRequestCallback() {
+            @Override
+            public void onSuccess() {
+                successCount.incrementAndGet();
+            }
+
+            @Override
+            public void onError(PluginException exception) {
+                errorCount.incrementAndGet();
+            }
+        };
+
+        invokePrivate(
+                "setPendingGeofenceStartCallback",
+                new Class<?>[]{BackgroundGeolocationFacade.StartRequestCallback.class, long.class},
+                callback,
+                generation
+        );
+
+        invokePrivate("resolvePendingGeofenceStartFailureIfNeeded", new Class<?>[]{});
+        invokePrivate("resolvePendingGeofenceStartFailureIfNeeded", new Class<?>[]{});
+
+        Assert.assertEquals(0, successCount.get());
+        Assert.assertEquals(1, errorCount.get());
+    }
+
     private Object invokePrivate(String name, Class<?>[] parameterTypes, Object... args) throws Exception {
         Method method = BackgroundGeolocationFacade.class.getDeclaredMethod(name, parameterTypes);
         method.setAccessible(true);

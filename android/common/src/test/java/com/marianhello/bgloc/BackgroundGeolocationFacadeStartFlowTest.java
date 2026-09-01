@@ -290,7 +290,6 @@ public class BackgroundGeolocationFacadeStartFlowTest {
         dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STOPPED, stopGeneration + 1L);
         dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STOPPED, stopGeneration);
 
-        facade.deliverNextStartCommand();
         dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STARTED, newerGeneration + 1L);
         dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STARTED, newerGeneration);
 
@@ -328,8 +327,8 @@ public class BackgroundGeolocationFacadeStartFlowTest {
 
         long stopGeneration = coordinator.getPendingStopGeneration();
         facade.deliverStopAcknowledgement(stopGeneration);
-        facade.deliverNextStartCommand();
         dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STOPPED, stopGeneration + 1L);
+        dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STARTED, newerGeneration);
 
         Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, coordinator.getOwner());
         Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, coordinator.getPendingStartOwner());

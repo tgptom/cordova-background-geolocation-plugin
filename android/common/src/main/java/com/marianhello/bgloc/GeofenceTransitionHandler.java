@@ -97,7 +97,7 @@ public final class GeofenceTransitionHandler {
             Log.i(TAG, "Starting precise tracking after geofence ENTER/DWELL");
             generation = coordinator.requestStart(TrackingOwnershipStore.OWNER_GEOFENCE, ACK_TIMEOUT_MS, null);
             LocationServiceProxy serviceProxy = new LocationServiceProxy(context);
-            serviceProxy.startForegroundService();
+            serviceProxy.startForegroundService(generation);
         } catch (RuntimeException error) {
             if (generation != 0L) {
                 coordinator.clearPendingStart(generation);

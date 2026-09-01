@@ -135,11 +135,28 @@ public class BackgroundGeolocationFacadeStartFlowTest {
         Assert.assertEquals(0L, coordinator.getPendingStartGeneration());
     }
 
+    @Test
+    public void manualPermissionGrantPromotesSameGenerationToServiceAckPhase() {
+        TestFacade facade = new TestFacade(context, true, false);
+
+        facade.start();
+        long permissionPendingGeneration = coordinator.getPendingStartGeneration();
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, coordinator.getPendingStartOwner());
+
+        facade.grantLocationPermission();
+
+        Assert.assertEquals(1, facade.startAttempts);
+        Assert.assertEquals(permissionPendingGeneration, facade.lastStartRequestGeneration);
+        Assert.assertEquals(permissionPendingGeneration, coordinator.getPendingStartGeneration());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, coordinator.getPendingStartOwner());
+    }
+
     private static class TestFacade extends BackgroundGeolocationFacade {
         private PermissionManager.PermissionRequestListener locationPermissionListener;
         private final boolean geofenceConfigValid;
         private final boolean throwOnStart;
         int startAttempts = 0;
+        long lastStartRequestGeneration = 0L;
 
         TestFacade(Context context, boolean geofenceConfigValid, boolean throwOnStart) {
             super(context, null);
@@ -163,8 +180,9 @@ public class BackgroundGeolocationFacadeStartFlowTest {
         }
 
         @Override
-        protected void startBackgroundService() {
+        protected void startBackgroundService(long requestGeneration) {
             startAttempts += 1;
+            lastStartRequestGeneration = requestGeneration;
             if (throwOnStart) {
                 throw new RuntimeException("Simulated service start dispatch failure");
             }

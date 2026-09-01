@@ -105,7 +105,7 @@ This plugin does **not** register geofences. Keep using a geofence plugin to cre
 
 #### Companion protocol contract
 - Android callback: `com.marianhello.bgloc.GeofenceTransitionHandler.onGeofenceTransition(Context,int,boolean)`
-- iOS notification: `PAPAGeofenceTrackingTransition` with payload keys:
+- iOS notification: `AppGeofenceTrackingTransition` with payload keys:
   - `transitionType` (`1` enter, `2` exit, `4` dwell)
   - `hasActiveInsideGeofence` (`Boolean`, true when at least one active geofence is still inside)
 

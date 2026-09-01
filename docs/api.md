@@ -97,7 +97,7 @@ Start background geolocation for companion geofence-transition integration.
 - This method does **not** register geofences.
 - Compatible contract:
   - Android: `com.marianhello.bgloc.GeofenceTransitionHandler.onGeofenceTransition(Context,int,boolean)`
-  - iOS notification: `PAPAGeofenceTrackingTransition` payload keys `transitionType` and `hasActiveInsideGeofence`
+  - iOS notification: `AppGeofenceTrackingTransition` payload keys `transitionType` and `hasActiveInsideGeofence`
 
 ## stop()
 

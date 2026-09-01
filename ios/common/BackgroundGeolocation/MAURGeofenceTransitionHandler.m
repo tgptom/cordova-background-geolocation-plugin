@@ -4,7 +4,7 @@
 #import "MAURConfig.h"
 #import "MAURLogging.h"
 
-NSString * const MAURGeofenceTrackingTransitionNotification = @"PAPAGeofenceTrackingTransition";
+NSString * const MAURGeofenceTrackingTransitionNotification = @"AppGeofenceTrackingTransition";
 NSString * const MAURGeofenceTrackingTransitionTypeKey = @"transitionType";
 NSString * const MAURGeofenceTrackingHasActiveInsideGeofenceKey = @"hasActiveInsideGeofence";
 

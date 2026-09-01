@@ -124,6 +124,9 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
     private long mServiceId = -1;
     private static boolean sIsRunning = false;
     private boolean mIsInForeground = false;
+    private ServiceLifecycleStateStore mServiceLifecycleStateStore;
+    private long mLastStartRequestGeneration = 0L;
+    private long mLastStopRequestGeneration = 0L;
 
     private static LocationTransform sLocationTransform;
     private static LocationProviderFactory sLocationProviderFactory;
@@ -173,6 +176,7 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
 
         logger = LoggerManager.getLogger(LocationServiceImpl.class);
         logger.info("Creating LocationServiceImpl");
+        mServiceLifecycleStateStore = new ServiceLifecycleStateStore(getApplicationContext());
 
         mServiceId = System.currentTimeMillis();
 
@@ -250,6 +254,9 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
         unregisterReceiver(connectivityChangeReceiver);
 
         sIsRunning = false;
+        if (mServiceLifecycleStateStore != null) {
+            mServiceLifecycleStateStore.markStopped();
+        }
         super.onDestroy();
     }
 
@@ -271,7 +278,7 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null) {
             // when service was killed and restarted we will restart service
-            start();
+            start(0L);
             return START_STICKY;
         }
 
@@ -285,10 +292,14 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
 
         if (containsCommand) {
             LocationServiceIntentBuilder.Command cmd = getCommand(intent);
-            processCommand(cmd.getId(), cmd.getArgument());
+            long requestGeneration = intent.getLongExtra(LocationServiceProxy.EXTRA_REQUEST_GENERATION, 0L);
+            if (requestGeneration == 0L) {
+                requestGeneration = intent.getLongExtra(LocationServiceProxy.EXTRA_START_REQUEST_GENERATION, 0L);
+            }
+            processCommand(cmd.getId(), cmd.getArgument(), requestGeneration);
         } else {
             // Could be a BOOT-event, or the OS just randomly restarted the service...
-            startForegroundService();
+            startForegroundService(0L);
         }
 
         if (containsMessage(intent)) {
@@ -302,17 +313,17 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
         // currently we do not process any message
     }
 
-    private void processCommand(int command, Object arg) {
+    private void processCommand(int command, Object arg, long requestGeneration) {
         try {
             switch (command) {
                 case CommandId.START:
-                    start();
+                    start(requestGeneration);
                     break;
                 case CommandId.START_FOREGROUND_SERVICE:
-                    startForegroundService();
+                    startForegroundService(requestGeneration);
                     break;
                 case CommandId.STOP:
-                    stop();
+                    stop(requestGeneration);
                     break;
                 case CommandId.CONFIGURE:
                     configure((Config) arg);
@@ -340,9 +351,14 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
 
     @Override
     public synchronized void start() {
+        start(0L);
+    }
+
+    private synchronized void start(long requestGeneration) {
         if (sIsRunning) {
             return;
         }
+        mLastStartRequestGeneration = requestGeneration;
 
         if (mConfig == null) {
             logger.warn("Attempt to start unconfigured service. Will use stored or default.");
@@ -376,20 +392,31 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
         Bundle bundle = new Bundle();
         bundle.putInt("action", MSG_ON_SERVICE_STARTED);
         bundle.putLong("serviceId", mServiceId);
+        bundle.putLong("requestGeneration", mLastStartRequestGeneration);
+        bundle.putLong("serviceGeneration", mServiceLifecycleStateStore.markStarted());
         broadcastMessage(bundle);
     }
 
     @Override
     public synchronized void startForegroundService() {
-        start();
+        startForegroundService(0L);
+    }
+
+    private synchronized void startForegroundService(long requestGeneration) {
+        start(requestGeneration);
         startForeground();
     }
 
     @Override
     public synchronized void stop() {
+        stop(0L);
+    }
+
+    private synchronized void stop(long requestGeneration) {
         if (!sIsRunning) {
             return;
         }
+        mLastStopRequestGeneration = requestGeneration;
 
         if (mProvider != null) {
             mProvider.onStop();
@@ -398,7 +425,11 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
         stopForeground(true);
         stopSelf();
 
-        broadcastMessage(MSG_ON_SERVICE_STOPPED);
+        Bundle bundle = new Bundle();
+        bundle.putInt("action", MSG_ON_SERVICE_STOPPED);
+        bundle.putLong("requestGeneration", mLastStopRequestGeneration);
+        bundle.putLong("serviceGeneration", mServiceLifecycleStateStore.markStopped());
+        broadcastMessage(bundle);
         sIsRunning = false;
     }
 

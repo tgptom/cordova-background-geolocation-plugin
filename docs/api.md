@@ -88,6 +88,17 @@ Platform: iOS, Android
 
 Start background geolocation.
 
+## startForGeofence()
+
+Platform: iOS, Android
+
+Start background geolocation for companion geofence-transition integration.
+
+- This method does **not** register geofences.
+- Compatible contract:
+  - Android: `com.marianhello.bgloc.GeofenceTransitionHandler.onGeofenceTransition(Context,int,boolean)`
+  - iOS notification: `AppGeofenceTrackingTransition` payload keys `transitionType` and `hasActiveInsideGeofence`
+
 ## stop()
 
 Platform: iOS, Android

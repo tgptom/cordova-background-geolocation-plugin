@@ -1,0 +1,231 @@
+package com.marianhello.bgloc;
+
+import android.content.Context;
+
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
+
+@RunWith(RobolectricTestRunner.class)
+public class TrackingOwnershipStoreTest {
+    private TrackingOwnershipStore store;
+
+    @Before
+    public void setUp() {
+        Context context = RuntimeEnvironment.application.getApplicationContext();
+        context.getSharedPreferences("com.marianhello.bgloc.geofence", Context.MODE_PRIVATE).edit().clear().commit();
+        store = new TrackingOwnershipStore(context);
+    }
+
+    @Test
+    public void pendingStartCommitsOnlyOnServiceStartedAck() {
+        long now = System.currentTimeMillis();
+        store.setPendingStartOwner(TrackingOwnershipStore.OWNER_GEOFENCE, now + 15000L);
+
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getOwner());
+
+        store.onServiceStartedAcknowledged();
+
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_GEOFENCE, store.getOwner());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getPendingStartOwner());
+    }
+
+    @Test
+    public void pendingManualStartRetainedBeforeDeadlineWhenServiceStopped() {
+        long now = System.currentTimeMillis();
+        store.setPendingStartOwner(TrackingOwnershipStore.OWNER_MANUAL, now + 15000L);
+
+        TrackingOwnershipStore.ReconciledState state = store.reconcileWithServiceState(false, now + 5000L);
+
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, state.pendingStartOwner);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getOwner());
+    }
+
+    @Test
+    public void permissionPendingManualStartRetainsPrecedenceBeforeDeadlineAcrossRestart() {
+        long now = System.currentTimeMillis();
+        long generation = store.setPendingStartPermissionOwner(TrackingOwnershipStore.OWNER_MANUAL, now + 60000L);
+        TrackingOwnershipStore restartedStore = new TrackingOwnershipStore(
+                RuntimeEnvironment.application.getApplicationContext()
+        );
+
+        TrackingOwnershipStore.ReconciledState state = restartedStore.reconcileWithServiceState(false, now + 30000L);
+
+        Assert.assertEquals(generation, restartedStore.getPendingStartGeneration());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, state.pendingStartOwner);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, store.getPendingStartOwner());
+    }
+
+    @Test
+    public void permissionPendingManualStartExpiresAfterDeadlineAcrossRestart() {
+        long now = System.currentTimeMillis();
+        store.setPendingStartPermissionOwner(TrackingOwnershipStore.OWNER_MANUAL, now + 100L);
+        TrackingOwnershipStore restartedStore = new TrackingOwnershipStore(
+                RuntimeEnvironment.application.getApplicationContext()
+        );
+
+        TrackingOwnershipStore.ReconciledState state = restartedStore.reconcileWithServiceState(false, now + 1000L);
+
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, state.pendingStartOwner);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, restartedStore.getPendingStartOwner());
+    }
+
+    @Test
+    public void pendingStartRollsBackAfterDeadlineWhenServiceStopped() {
+        long now = System.currentTimeMillis();
+        store.setPendingStartOwner(TrackingOwnershipStore.OWNER_GEOFENCE, now + 100L);
+
+        TrackingOwnershipStore.ReconciledState state = store.reconcileWithServiceState(false, now + 1000L);
+
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, state.pendingStartOwner);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getPendingStartOwner());
+    }
+
+    @Test
+    public void processRestartDoesNotAutoCommitPendingStartWithoutCorrelatedAck() {
+        long now = System.currentTimeMillis();
+        store.setPendingStartOwner(TrackingOwnershipStore.OWNER_MANUAL, now + 15000L);
+        RuntimeEnvironment.application
+                .getApplicationContext()
+                .getSharedPreferences("com.marianhello.bgloc.geofence", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("service_started", true)
+                .commit();
+
+        TrackingOwnershipStore.ReconciledState state = store.reconcileWithServiceState(true, now + 1L);
+
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, state.owner);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getOwner());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, store.getPendingStartOwner());
+    }
+
+    @Test
+    public void lateStartAcknowledgementAfterTimeoutDoesNotCreateInvalidOwnership() {
+        long now = System.currentTimeMillis();
+        store.setPendingStartOwner(TrackingOwnershipStore.OWNER_GEOFENCE, now + 100L);
+
+        store.reconcileWithServiceState(false, now + 1000L);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getPendingStartOwner());
+
+        store.onServiceStartedAcknowledged();
+
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getOwner());
+    }
+
+    @Test
+    public void clearPendingStartRequiresMatchingGeneration() {
+        long now = System.currentTimeMillis();
+        long firstGeneration = store.setPendingStartPermissionOwner(TrackingOwnershipStore.OWNER_MANUAL, now + 60000L);
+        long secondGeneration = store.setPendingStartOwner(TrackingOwnershipStore.OWNER_GEOFENCE, now + 15000L);
+
+        store.clearPendingStartOwnerIfGeneration(firstGeneration);
+
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_GEOFENCE, store.getPendingStartOwner());
+        Assert.assertEquals(secondGeneration, store.getPendingStartGeneration());
+    }
+
+    @Test
+    public void permissionPendingPromotionKeepsSameGeneration() {
+        long now = System.currentTimeMillis();
+        long generation = store.setPendingStartPermissionOwner(TrackingOwnershipStore.OWNER_MANUAL, now + 60000L);
+
+        boolean promoted = store.promotePendingStartToServiceAck(generation, now + 15000L);
+
+        Assert.assertTrue(promoted);
+        Assert.assertEquals(generation, store.getPendingStartGeneration());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, store.getPendingStartOwner());
+    }
+
+    @Test
+    public void duplicateServiceStartedAckIsIdempotent() {
+        long now = System.currentTimeMillis();
+        store.setPendingStartOwner(TrackingOwnershipStore.OWNER_GEOFENCE, now + 15000L);
+
+        store.onServiceStartedAcknowledged();
+        store.onServiceStartedAcknowledged();
+
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_GEOFENCE, store.getOwner());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getPendingStartOwner());
+    }
+
+    @Test
+    public void manualOwnerIsPreservedWhenServiceStopped() {
+        store.setOwner(TrackingOwnershipStore.OWNER_MANUAL);
+
+        TrackingOwnershipStore.ReconciledState state = store.reconcileWithServiceState(false, System.currentTimeMillis());
+
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, state.owner);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, store.getOwner());
+    }
+
+    @Test
+    public void geofenceOwnerIsClearedWhenServiceStoppedWithoutPendingState() {
+        store.setOwner(TrackingOwnershipStore.OWNER_GEOFENCE);
+
+        TrackingOwnershipStore.ReconciledState state = store.reconcileWithServiceState(false, System.currentTimeMillis());
+
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, state.owner);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getOwner());
+    }
+
+    @Test
+    public void stalePersistedRunningGeofenceOwnerIsReconciledWhenServiceNotRunning() {
+        store.setOwner(TrackingOwnershipStore.OWNER_GEOFENCE);
+        RuntimeEnvironment.application
+                .getApplicationContext()
+                .getSharedPreferences("com.marianhello.bgloc.geofence", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("service_started", true)
+                .commit();
+
+        TrackingOwnershipStore.ReconciledState state = store.reconcileWithServiceState(false, System.currentTimeMillis());
+
+        Assert.assertFalse(state.serviceStarted);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getOwner());
+    }
+
+    @Test
+    public void stopAckClearsOwnerAndPendingState() {
+        long now = System.currentTimeMillis();
+        store.setOwner(TrackingOwnershipStore.OWNER_GEOFENCE);
+        store.setPendingStartOwner(TrackingOwnershipStore.OWNER_GEOFENCE, now + 15000L);
+        store.setPendingStopOwner(TrackingOwnershipStore.OWNER_GEOFENCE, now + 15000L);
+
+        store.onServiceStoppedAcknowledged();
+
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getOwner());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getPendingStartOwner());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getPendingStopOwner());
+    }
+
+    @Test
+    public void duplicateServiceStoppedAckIsIdempotent() {
+        store.setOwner(TrackingOwnershipStore.OWNER_GEOFENCE);
+
+        store.onServiceStoppedAcknowledged();
+        store.onServiceStoppedAcknowledged();
+
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getOwner());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getPendingStopOwner());
+    }
+
+    @Test
+    public void multipleTerminalStartGenerationsAreTrackedIndependently() {
+        long now = System.currentTimeMillis();
+        long firstGeneration = store.setPendingStartOwner(TrackingOwnershipStore.OWNER_GEOFENCE, now + 100L);
+        store.markFailedStart(firstGeneration, TrackingOwnershipStore.OWNER_GEOFENCE);
+        store.clearPendingStartOwnerIfGeneration(firstGeneration);
+
+        long secondGeneration = store.setPendingStartOwner(TrackingOwnershipStore.OWNER_GEOFENCE, now + 100L);
+        store.markCancelledStart(secondGeneration, TrackingOwnershipStore.OWNER_GEOFENCE);
+        store.clearPendingStartOwnerIfGeneration(secondGeneration);
+
+        Assert.assertTrue(store.isTerminalStartGenerationForOwner(firstGeneration, TrackingOwnershipStore.OWNER_GEOFENCE));
+        Assert.assertTrue(store.isTerminalStartGenerationForOwner(secondGeneration, TrackingOwnershipStore.OWNER_GEOFENCE));
+        Assert.assertFalse(store.isCancelledStartGenerationForOwner(firstGeneration, TrackingOwnershipStore.OWNER_GEOFENCE));
+        Assert.assertTrue(store.isCancelledStartGenerationForOwner(secondGeneration, TrackingOwnershipStore.OWNER_GEOFENCE));
+    }
+}

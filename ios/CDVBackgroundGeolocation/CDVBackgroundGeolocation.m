@@ -28,7 +28,7 @@ static NSString * const TAG = @"CDVBackgroundGeolocation";
 - (void)pluginInitialize
 {
 
-    facade = [[MAURBackgroundGeolocationFacade alloc] init];
+    facade = [MAURBackgroundGeolocationFacade sharedInstance];
     facade.delegate = self;
 
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onAppPause:) name:UIApplicationDidEnterBackgroundNotification object:nil];
@@ -70,19 +70,46 @@ static NSString * const TAG = @"CDVBackgroundGeolocation";
     NSLog(@"%@ #%@", TAG, @"start");
     [self.commandDelegate runInBackground:^{
         NSError *error = nil;
-
-        [facade start:&error];
-        if (error == nil) {
+        BOOL started = [facade startWithOwner:MAURTrackingOwnerManual error:&error];
+        if (!started && error == nil) {
+            error = [self defaultStartErrorWithCode:MAURBGStartFailed message:@"Unable to start background geolocation."];
+        }
+        if (started) {
             [self sendEvent:@"start"];
         } else {
             [self sendError:error];
         }
-        CDVPluginResult* result = nil;
-        if ([facade configure:config error:&error]) {
-            result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-        } else {
-            result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsDictionary:[self errorToDictionary:error]];
+        CDVPluginResult* result = started
+            ? [CDVPluginResult resultWithStatus:CDVCommandStatus_OK]
+            : [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsDictionary:[self errorToDictionary:error]];
+        [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+    }];
+}
+
+- (void) startForGeofence:(CDVInvokedUrlCommand*)command
+{
+    NSLog(@"%@ #%@", TAG, @"startForGeofence");
+    [self.commandDelegate runInBackground:^{
+        NSError *error = nil;
+        BOOL started = [facade startWithOwner:MAURTrackingOwnerGeofence error:&error];
+        if (!started && error == nil) {
+            MAURTrackingOwner owner = [facade trackingOwner];
+            if (owner == MAURTrackingOwnerManual) {
+                error = [self defaultStartErrorWithCode:MAURBGOwnershipConflict
+                                                message:@"Tracking already started manually."];
+            } else {
+                error = [self defaultStartErrorWithCode:MAURBGStartFailed
+                                                message:@"Unable to start geofence-owned background geolocation."];
+            }
         }
+        if (started) {
+            [self sendEvent:@"start"];
+        } else {
+            [self sendError:error];
+        }
+        CDVPluginResult* result = started
+            ? [CDVPluginResult resultWithStatus:CDVCommandStatus_OK]
+            : [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsDictionary:[self errorToDictionary:error]];
         [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
     }];
 }
@@ -399,12 +426,22 @@ static NSString * const TAG = @"CDVBackgroundGeolocation";
 
 - (NSDictionary*) errorToDictionary:(NSError*)error
 {
+    if (error == nil) {
+        error = [self defaultStartErrorWithCode:MAURBGStartFailed message:@"Unknown background geolocation error."];
+    }
     NSDictionary *userInfo = [error userInfo];
     NSString *errorMessage = [error localizedDescription];
     if (errorMessage == nil) {
         errorMessage = [[userInfo objectForKey:NSUnderlyingErrorKey] localizedDescription];
     }
     return @{ @"code": [NSNumber numberWithLong:error.code], @"message": errorMessage};
+}
+
+- (NSError*) defaultStartErrorWithCode:(MAURBGErrorCode)code message:(NSString*)message
+{
+    return [NSError errorWithDomain:@"com.marianhello" code:code userInfo:@{
+        NSLocalizedDescriptionKey: message
+    }];
 }
 
 - (void) onAuthorizationChanged:(MAURLocationAuthorizationStatus)authStatus
@@ -493,7 +530,11 @@ static NSString * const TAG = @"CDVBackgroundGeolocation";
     if ([dict objectForKey:UIApplicationLaunchOptionsLocationKey]) {
         NSLog(@"%@ %@", TAG, @"started by system on location event.");
         if (![config stopOnTerminate]) {
-            [facade start:nil];
+            if ([facade hasManualTrackingIntent]) {
+                [facade startWithOwner:MAURTrackingOwnerManual error:nil];
+            } else {
+                [facade start:nil];
+            }
             [facade switchMode:MAURBackgroundMode];
         }
     }

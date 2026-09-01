@@ -19,6 +19,8 @@ typedef NS_ENUM(NSInteger, MAURBGErrorCode) {
     MAURBGConfigureError   = 1002,
     MAURBGServiceError     = 1003,
     MAURBGJsonError        = 1004,
+    MAURBGOwnershipConflict = 1005,
+    MAURBGStartFailed       = 1006,
     MAURBGNotImplemented   = 9999
 };
 

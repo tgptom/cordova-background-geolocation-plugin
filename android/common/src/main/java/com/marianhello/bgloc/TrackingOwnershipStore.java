@@ -2,6 +2,10 @@ package com.marianhello.bgloc;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.text.TextUtils;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 final class TrackingOwnershipStore {
     static final int OWNER_NONE = 0;
@@ -17,10 +21,12 @@ final class TrackingOwnershipStore {
     private static final String PENDING_STOP_OWNER_KEY = "pending_stop_owner";
     private static final String PENDING_STOP_DEADLINE_KEY = "pending_stop_deadline";
     private static final String PENDING_STOP_GENERATION_KEY = "pending_stop_generation";
-    private static final String FAILED_START_OWNER_KEY = "failed_start_owner";
-    private static final String FAILED_START_GENERATION_KEY = "failed_start_generation";
+    private static final String FAILED_START_GENERATIONS_KEY = "failed_start_generations";
     private static final String REQUEST_GENERATION_KEY = "request_generation";
     private static final String SERVICE_STARTED_KEY = "service_started";
+    private static final int MAX_TERMINAL_START_GENERATIONS = 16;
+    private static final int START_TERMINAL_STATUS_FAILED = 1;
+    private static final int START_TERMINAL_STATUS_CANCELLED = 2;
     private static final int PENDING_START_PHASE_NONE = 0;
     private static final int PENDING_START_PHASE_PERMISSION = 1;
     private static final int PENDING_START_PHASE_SERVICE_ACK = 2;
@@ -38,6 +44,16 @@ final class TrackingOwnershipStore {
             this.pendingStartOwner = pendingStartOwner;
             this.pendingStopOwner = pendingStopOwner;
             this.serviceStarted = serviceStarted;
+        }
+
+        static final class StartGenerationStatus {
+            final int owner;
+            final boolean cancelled;
+
+            StartGenerationStatus(int owner, boolean cancelled) {
+                this.owner = owner;
+                this.cancelled = cancelled;
+            }
         }
     }
 
@@ -116,33 +132,64 @@ final class TrackingOwnershipStore {
     }
 
     void markFailedStart(long generation, int owner) {
+        markTerminalStart(generation, owner, START_TERMINAL_STATUS_FAILED);
+    }
+
+    void markCancelledStart(long generation, int owner) {
+        markTerminalStart(generation, owner, START_TERMINAL_STATUS_CANCELLED);
+    }
+
+    StartGenerationStatus getStartGenerationStatus(long generation) {
+        TerminalStartRecord record = getTerminalStartRecord(generation);
+        if (record == null) {
+            return null;
+        }
+        return new StartGenerationStatus(
+                normalizeOwner(record.owner),
+                record.status == START_TERMINAL_STATUS_CANCELLED
+        );
+    }
+
+    boolean isTerminalStartGenerationForOwner(long generation, int owner) {
+        TerminalStartRecord record = getTerminalStartRecord(generation);
+        return record != null && normalizeOwner(record.owner) == normalizeOwner(owner);
+    }
+
+    boolean isCancelledStartGenerationForOwner(long generation, int owner) {
+        TerminalStartRecord record = getTerminalStartRecord(generation);
+        return record != null
+                && normalizeOwner(record.owner) == normalizeOwner(owner)
+                && record.status == START_TERMINAL_STATUS_CANCELLED;
+    }
+
+    private void markTerminalStart(long generation, int owner, int status) {
         int normalizedOwner = normalizeOwner(owner);
         if (generation == 0L || normalizedOwner == OWNER_NONE) {
             return;
         }
-        prefs.edit()
-                .putLong(FAILED_START_GENERATION_KEY, generation)
-                .putInt(FAILED_START_OWNER_KEY, normalizedOwner)
-                .apply();
+        LinkedHashMap<Long, TerminalStartRecord> records = getTerminalStartRecords();
+        records.remove(generation);
+        records.put(generation, new TerminalStartRecord(normalizedOwner, status));
+        trimTerminalStartRecords(records);
+        persistTerminalStartRecords(records);
     }
 
     boolean isFailedStartGenerationForOwner(long generation, int owner) {
-        return generation != 0L
-                && prefs.getLong(FAILED_START_GENERATION_KEY, 0L) == generation
-                && normalizeOwner(prefs.getInt(FAILED_START_OWNER_KEY, OWNER_NONE)) == normalizeOwner(owner);
+        return isTerminalStartGenerationForOwner(generation, owner);
     }
 
     void clearFailedStartOwnerIfGeneration(long generation) {
-        if (generation != 0L && prefs.getLong(FAILED_START_GENERATION_KEY, 0L) == generation) {
-            clearFailedStartOwner();
+        if (generation == 0L) {
+            return;
+        }
+        LinkedHashMap<Long, TerminalStartRecord> records = getTerminalStartRecords();
+        if (records.remove(generation) != null) {
+            persistTerminalStartRecords(records);
         }
     }
 
     void clearFailedStartOwner() {
-        prefs.edit()
-                .remove(FAILED_START_OWNER_KEY)
-                .remove(FAILED_START_GENERATION_KEY)
-                .apply();
+        prefs.edit().remove(FAILED_START_GENERATIONS_KEY).apply();
     }
 
     int getPendingStopOwner() {
@@ -196,7 +243,6 @@ final class TrackingOwnershipStore {
 
     void markServiceStartedAcknowledged() {
         markServiceStarted(true);
-        clearPendingStopOwner();
     }
 
     void onServiceStoppedAcknowledged() {
@@ -238,13 +284,6 @@ final class TrackingOwnershipStore {
         boolean serviceStarted = persistedServiceStarted || serviceStartedHint;
 
         if (serviceStarted) {
-            if (persistedServiceStarted && pendingStartOwner != OWNER_NONE) {
-                setOwner(pendingStartOwner);
-                clearPendingStartOwner();
-                owner = pendingStartOwner;
-                pendingStartOwner = OWNER_NONE;
-            }
-
             return new ReconciledState(owner, pendingStartOwner, pendingStopOwner, true);
         }
 
@@ -306,5 +345,82 @@ final class TrackingOwnershipStore {
             return owner;
         }
         return OWNER_NONE;
+    }
+
+    private TerminalStartRecord getTerminalStartRecord(long generation) {
+        if (generation == 0L) {
+            return null;
+        }
+        return getTerminalStartRecords().get(generation);
+    }
+
+    private LinkedHashMap<Long, TerminalStartRecord> getTerminalStartRecords() {
+        LinkedHashMap<Long, TerminalStartRecord> records = new LinkedHashMap<>();
+        String serialized = prefs.getString(FAILED_START_GENERATIONS_KEY, null);
+        if (TextUtils.isEmpty(serialized)) {
+            return records;
+        }
+        String[] entries = serialized.split(",");
+        for (String entry : entries) {
+            if (TextUtils.isEmpty(entry)) {
+                continue;
+            }
+            String[] parts = entry.split(":");
+            if (parts.length != 3) {
+                continue;
+            }
+            try {
+                long generation = Long.parseLong(parts[0]);
+                int owner = normalizeOwner(Integer.parseInt(parts[1]));
+                int status = Integer.parseInt(parts[2]);
+                if (generation == 0L || owner == OWNER_NONE) {
+                    continue;
+                }
+                if (status != START_TERMINAL_STATUS_FAILED && status != START_TERMINAL_STATUS_CANCELLED) {
+                    continue;
+                }
+                records.put(generation, new TerminalStartRecord(owner, status));
+            } catch (NumberFormatException ignored) {
+                // ignore malformed entries
+            }
+        }
+        trimTerminalStartRecords(records);
+        return records;
+    }
+
+    private void persistTerminalStartRecords(LinkedHashMap<Long, TerminalStartRecord> records) {
+        if (records.isEmpty()) {
+            prefs.edit().remove(FAILED_START_GENERATIONS_KEY).apply();
+            return;
+        }
+        StringBuilder serialized = new StringBuilder();
+        for (Map.Entry<Long, TerminalStartRecord> entry : records.entrySet()) {
+            if (serialized.length() > 0) {
+                serialized.append(",");
+            }
+            serialized.append(entry.getKey())
+                    .append(":")
+                    .append(entry.getValue().owner)
+                    .append(":")
+                    .append(entry.getValue().status);
+        }
+        prefs.edit().putString(FAILED_START_GENERATIONS_KEY, serialized.toString()).apply();
+    }
+
+    private void trimTerminalStartRecords(LinkedHashMap<Long, TerminalStartRecord> records) {
+        while (records.size() > MAX_TERMINAL_START_GENERATIONS) {
+            Long oldest = records.keySet().iterator().next();
+            records.remove(oldest);
+        }
+    }
+
+    private static final class TerminalStartRecord {
+        final int owner;
+        final int status;
+
+        TerminalStartRecord(int owner, int status) {
+            this.owner = owner;
+            this.status = status;
+        }
     }
 }

@@ -7,6 +7,7 @@ import android.os.Build;
 import com.marianhello.bgloc.Config;
 
 public class LocationServiceProxy implements LocationService, LocationServiceInfo {
+    public static final String EXTRA_REQUEST_GENERATION = "com.marianhello.bgloc.request_generation";
     public static final String EXTRA_START_REQUEST_GENERATION = "com.marianhello.bgloc.start_request_generation";
 
     private final Context mContext;
@@ -74,6 +75,7 @@ public class LocationServiceProxy implements LocationService, LocationServiceInf
         Intent intent = mIntentBuilder.setCommand(CommandId.START).build();
         if (requestGeneration != 0L) {
             intent.putExtra(EXTRA_START_REQUEST_GENERATION, requestGeneration);
+            intent.putExtra(EXTRA_REQUEST_GENERATION, requestGeneration);
         }
 //        intent.addFlags(Intent.FLAG_FROM_BACKGROUND);
         // start service to keep service running even if no clients are bound to it
@@ -89,6 +91,7 @@ public class LocationServiceProxy implements LocationService, LocationServiceInf
         Intent intent = mIntentBuilder.setCommand(CommandId.START_FOREGROUND_SERVICE).build();
         if (requestGeneration != 0L) {
             intent.putExtra(EXTRA_START_REQUEST_GENERATION, requestGeneration);
+            intent.putExtra(EXTRA_REQUEST_GENERATION, requestGeneration);
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             mContext.startForegroundService(intent);
@@ -99,9 +102,16 @@ public class LocationServiceProxy implements LocationService, LocationServiceInf
 
     @Override
     public void stop() {
+        stop(0L);
+    }
+
+    public void stop(long requestGeneration) {
         if (!isStarted()) { return; }
 
         Intent intent = mIntentBuilder.setCommand(CommandId.STOP).build();
+        if (requestGeneration != 0L) {
+            intent.putExtra(EXTRA_REQUEST_GENERATION, requestGeneration);
+        }
         executeIntentCommand(intent);
     }
 

@@ -1,10 +1,14 @@
 package com.marianhello.bgloc;
 
 import android.content.Context;
+import android.content.Intent;
 import android.os.Looper;
 
 import com.intentfilter.androidpermissions.PermissionManager;
 import com.intentfilter.androidpermissions.models.DeniedPermissions;
+import com.marianhello.bgloc.service.LocationServiceImpl;
+
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -149,6 +153,93 @@ public class BackgroundGeolocationFacadeStartFlowTest {
         Assert.assertEquals(permissionPendingGeneration, facade.lastStartRequestGeneration);
         Assert.assertEquals(permissionPendingGeneration, coordinator.getPendingStartGeneration());
         Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, coordinator.getPendingStartOwner());
+    }
+
+    @Test
+    public void lateStaleStartAckDoesNotResolveNewerGeofenceCallback() {
+        TestFacade facade = new TestFacade(context, true, false);
+        final AtomicInteger timeoutErrorCount = new AtomicInteger(0);
+
+        facade.startForGeofence(new BackgroundGeolocationFacade.StartRequestCallback() {
+            @Override
+            public void onSuccess() {
+                Assert.fail("Unexpected success callback");
+            }
+
+            @Override
+            public void onError(PluginException exception) {
+                timeoutErrorCount.incrementAndGet();
+            }
+        });
+        facade.grantLocationPermission();
+        long staleGeneration = coordinator.getPendingStartGeneration();
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(16, TimeUnit.SECONDS);
+        Assert.assertEquals(1, timeoutErrorCount.get());
+
+        final AtomicInteger newerSuccessCount = new AtomicInteger(0);
+        final AtomicInteger newerErrorCount = new AtomicInteger(0);
+        facade.startForGeofence(new BackgroundGeolocationFacade.StartRequestCallback() {
+            @Override
+            public void onSuccess() {
+                newerSuccessCount.incrementAndGet();
+            }
+
+            @Override
+            public void onError(PluginException exception) {
+                newerErrorCount.incrementAndGet();
+            }
+        });
+        facade.grantLocationPermission();
+        long newerGeneration = coordinator.getPendingStartGeneration();
+        Assert.assertTrue(newerGeneration > staleGeneration);
+
+        dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STARTED, staleGeneration);
+
+        Assert.assertEquals(0, newerSuccessCount.get());
+        Assert.assertEquals(0, newerErrorCount.get());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_GEOFENCE, coordinator.getPendingStartOwner());
+        Assert.assertEquals(newerGeneration, coordinator.getPendingStartGeneration());
+    }
+
+    @Test
+    public void unrelatedOrDuplicateStartEventsCannotResolvePendingGeofenceCallback() {
+        TestFacade facade = new TestFacade(context, true, false);
+        final AtomicInteger successCount = new AtomicInteger(0);
+        final AtomicInteger errorCount = new AtomicInteger(0);
+
+        facade.startForGeofence(new BackgroundGeolocationFacade.StartRequestCallback() {
+            @Override
+            public void onSuccess() {
+                successCount.incrementAndGet();
+            }
+
+            @Override
+            public void onError(PluginException exception) {
+                errorCount.incrementAndGet();
+            }
+        });
+        facade.grantLocationPermission();
+        long generation = coordinator.getPendingStartGeneration();
+        Assert.assertTrue(generation > 0L);
+
+        dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STARTED, 0L);
+        dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STARTED, generation + 1L);
+
+        Assert.assertEquals(0, successCount.get());
+        Assert.assertEquals(0, errorCount.get());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_GEOFENCE, coordinator.getPendingStartOwner());
+
+        dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STARTED, generation);
+        dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STARTED, generation);
+        Assert.assertEquals(1, successCount.get());
+        Assert.assertEquals(0, errorCount.get());
+    }
+
+    private void dispatchLifecycleBroadcast(int action, long requestGeneration) {
+        Intent intent = new Intent(LocationServiceImpl.ACTION_BROADCAST);
+        intent.putExtra("action", action);
+        intent.putExtra("requestGeneration", requestGeneration);
+        LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
     }
 
     private static class TestFacade extends BackgroundGeolocationFacade {

@@ -115,7 +115,7 @@ public final class GeofenceTransitionHandler {
             Log.i(TAG, "Stopping precise tracking after final geofence EXIT");
             generation = coordinator.requestStop(TrackingOwnershipStore.OWNER_GEOFENCE, ACK_TIMEOUT_MS, null);
             LocationServiceProxy serviceProxy = new LocationServiceProxy(context);
-            serviceProxy.stop();
+            serviceProxy.stop(generation);
         } catch (RuntimeException error) {
             if (generation != 0L) {
                 coordinator.clearPendingStop(generation);

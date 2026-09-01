@@ -85,7 +85,7 @@ public class TrackingOwnershipStoreTest {
     }
 
     @Test
-    public void processRestartCommitsPendingStartWhenServiceAlreadyRunning() {
+    public void processRestartDoesNotAutoCommitPendingStartWithoutCorrelatedAck() {
         long now = System.currentTimeMillis();
         store.setPendingStartOwner(TrackingOwnershipStore.OWNER_MANUAL, now + 15000L);
         RuntimeEnvironment.application
@@ -97,9 +97,9 @@ public class TrackingOwnershipStoreTest {
 
         TrackingOwnershipStore.ReconciledState state = store.reconcileWithServiceState(true, now + 1L);
 
-        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, state.owner);
-        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, store.getOwner());
-        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getPendingStartOwner());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, state.owner);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getOwner());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, store.getPendingStartOwner());
     }
 
     @Test
@@ -210,5 +210,22 @@ public class TrackingOwnershipStoreTest {
 
         Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getOwner());
         Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getPendingStopOwner());
+    }
+
+    @Test
+    public void multipleTerminalStartGenerationsAreTrackedIndependently() {
+        long now = System.currentTimeMillis();
+        long firstGeneration = store.setPendingStartOwner(TrackingOwnershipStore.OWNER_GEOFENCE, now + 100L);
+        store.markFailedStart(firstGeneration, TrackingOwnershipStore.OWNER_GEOFENCE);
+        store.clearPendingStartOwnerIfGeneration(firstGeneration);
+
+        long secondGeneration = store.setPendingStartOwner(TrackingOwnershipStore.OWNER_GEOFENCE, now + 100L);
+        store.markCancelledStart(secondGeneration, TrackingOwnershipStore.OWNER_GEOFENCE);
+        store.clearPendingStartOwnerIfGeneration(secondGeneration);
+
+        Assert.assertTrue(store.isTerminalStartGenerationForOwner(firstGeneration, TrackingOwnershipStore.OWNER_GEOFENCE));
+        Assert.assertTrue(store.isTerminalStartGenerationForOwner(secondGeneration, TrackingOwnershipStore.OWNER_GEOFENCE));
+        Assert.assertFalse(store.isCancelledStartGenerationForOwner(firstGeneration, TrackingOwnershipStore.OWNER_GEOFENCE));
+        Assert.assertTrue(store.isCancelledStartGenerationForOwner(secondGeneration, TrackingOwnershipStore.OWNER_GEOFENCE));
     }
 }

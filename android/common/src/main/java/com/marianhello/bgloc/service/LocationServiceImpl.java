@@ -126,6 +126,7 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
     private boolean mIsInForeground = false;
     private ServiceLifecycleStateStore mServiceLifecycleStateStore;
     private long mLastStartRequestGeneration = 0L;
+    private long mLastStopRequestGeneration = 0L;
 
     private static LocationTransform sLocationTransform;
     private static LocationProviderFactory sLocationProviderFactory;
@@ -291,7 +292,10 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
 
         if (containsCommand) {
             LocationServiceIntentBuilder.Command cmd = getCommand(intent);
-            long requestGeneration = intent.getLongExtra(LocationServiceProxy.EXTRA_START_REQUEST_GENERATION, 0L);
+            long requestGeneration = intent.getLongExtra(LocationServiceProxy.EXTRA_REQUEST_GENERATION, 0L);
+            if (requestGeneration == 0L) {
+                requestGeneration = intent.getLongExtra(LocationServiceProxy.EXTRA_START_REQUEST_GENERATION, 0L);
+            }
             processCommand(cmd.getId(), cmd.getArgument(), requestGeneration);
         } else {
             // Could be a BOOT-event, or the OS just randomly restarted the service...
@@ -319,7 +323,7 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
                     startForegroundService(requestGeneration);
                     break;
                 case CommandId.STOP:
-                    stop();
+                    stop(requestGeneration);
                     break;
                 case CommandId.CONFIGURE:
                     configure((Config) arg);
@@ -405,9 +409,14 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
 
     @Override
     public synchronized void stop() {
+        stop(0L);
+    }
+
+    private synchronized void stop(long requestGeneration) {
         if (!sIsRunning) {
             return;
         }
+        mLastStopRequestGeneration = requestGeneration;
 
         if (mProvider != null) {
             mProvider.onStop();
@@ -418,6 +427,7 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
 
         Bundle bundle = new Bundle();
         bundle.putInt("action", MSG_ON_SERVICE_STOPPED);
+        bundle.putLong("requestGeneration", mLastStopRequestGeneration);
         bundle.putLong("serviceGeneration", mServiceLifecycleStateStore.markStopped());
         broadcastMessage(bundle);
         sIsRunning = false;

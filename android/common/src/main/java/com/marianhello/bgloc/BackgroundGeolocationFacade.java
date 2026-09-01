@@ -73,6 +73,7 @@ public class BackgroundGeolocationFacade {
 
     private BackgroundLocation mStationaryLocation;
     private StartRequestCallback mPendingGeofenceStartCallback;
+    private long mPendingGeofenceStartGeneration;
 
     private org.slf4j.Logger logger;
 
@@ -162,8 +163,9 @@ public class BackgroundGeolocationFacade {
                 case LocationServiceImpl.MSG_ON_SERVICE_STARTED: {
                     logger.debug("Received MSG_ON_SERVICE_STARTED");
                     long requestGeneration = bundle.getLong("requestGeneration", 0L);
-                    mLifecycleCoordinator.handleServiceLifecycleAction(action, requestGeneration);
-                    resolvePendingGeofenceStartSuccess();
+                    TrackingLifecycleCoordinator.LifecycleActionResult lifecycleResult =
+                            mLifecycleCoordinator.handleServiceLifecycleAction(action, requestGeneration);
+                    resolvePendingGeofenceStartSuccess(lifecycleResult);
                     if (mDelegate != null) {
                         mDelegate.onServiceStatusChanged(SERVICE_STARTED);
                     }
@@ -279,7 +281,7 @@ public class BackgroundGeolocationFacade {
                 ? mLifecycleCoordinator.requestPermissionPendingStart(requestedOwner, PERMISSION_PENDING_TIMEOUT_MS)
                 : 0L;
         if (requestedOwner == TrackingOwnershipStore.OWNER_GEOFENCE) {
-            setPendingGeofenceStartCallback(geofenceCallback);
+            setPendingGeofenceStartCallback(geofenceCallback, 0L);
         }
 
         requestLocationPermissions(new PermissionManager.PermissionRequestListener() {
@@ -329,6 +331,9 @@ public class BackgroundGeolocationFacade {
 
                 try {
                     startBackgroundService(pendingGeneration);
+                    if (requestedOwner == TrackingOwnershipStore.OWNER_GEOFENCE) {
+                        setPendingGeofenceStartGeneration(pendingGeneration);
+                    }
                 } catch (SecurityException e) {
                     clearPendingStartRequest(pendingGeneration, true);
                     notifyGeofenceStartError(new PluginException(
@@ -391,8 +396,9 @@ public class BackgroundGeolocationFacade {
         // unregisterServiceBroadcast();
 
         TrackingOwnershipStore.ReconciledState state = mLifecycleCoordinator.reconcileState();
+        long stopGeneration = 0L;
         if (state.owner != TrackingOwnershipStore.OWNER_NONE) {
-            mLifecycleCoordinator.requestStop(state.owner, STOP_ACK_TIMEOUT_MS, null);
+            stopGeneration = mLifecycleCoordinator.requestStop(state.owner, STOP_ACK_TIMEOUT_MS, null);
         }
         if (state.pendingStartOwner == TrackingOwnershipStore.OWNER_GEOFENCE) {
             notifyGeofenceStartError(new PluginException(
@@ -400,8 +406,8 @@ public class BackgroundGeolocationFacade {
                     PluginException.START_FAILED_ERROR
             ));
         }
-        clearPendingStartRequest();
-        stopBackgroundService();
+        mLifecycleCoordinator.cancelPendingStart();
+        stopBackgroundService(stopGeneration);
     }
 
     public void pause() {
@@ -620,8 +626,16 @@ public class BackgroundGeolocationFacade {
     }
 
     protected void stopBackgroundService() {
+        stopBackgroundService(0L);
+    }
+
+    protected void stopBackgroundService(long requestGeneration) {
         logger.info("Attempt to stop bg service");
-        mService.stop();
+        if (requestGeneration != 0L && mService instanceof LocationServiceProxy) {
+            ((LocationServiceProxy) mService).stop(requestGeneration);
+        } else {
+            mService.stop();
+        }
     }
 
     protected boolean isGeofenceStartConfigurationValid() {
@@ -634,8 +648,15 @@ public class BackgroundGeolocationFacade {
         }
     }
 
-    private synchronized void setPendingGeofenceStartCallback(StartRequestCallback callback) {
+    private synchronized void setPendingGeofenceStartCallback(StartRequestCallback callback, long generation) {
         mPendingGeofenceStartCallback = callback;
+        mPendingGeofenceStartGeneration = generation;
+    }
+
+    private synchronized void setPendingGeofenceStartGeneration(long generation) {
+        if (mPendingGeofenceStartCallback != null) {
+            mPendingGeofenceStartGeneration = generation;
+        }
     }
 
     private synchronized void clearPendingStartRequest(long generation, boolean markFailed) {
@@ -646,15 +667,24 @@ public class BackgroundGeolocationFacade {
         }
     }
 
-    private synchronized void clearPendingStartRequest() {
-        mLifecycleCoordinator.clearPendingStart();
-    }
-
-    private void resolvePendingGeofenceStartSuccess() {
+    private void resolvePendingGeofenceStartSuccess(TrackingLifecycleCoordinator.LifecycleActionResult lifecycleResult) {
         StartRequestCallback callback;
+        long expectedGeneration;
         synchronized (this) {
+            if (mPendingGeofenceStartCallback == null) {
+                return;
+            }
+            expectedGeneration = mPendingGeofenceStartGeneration;
+            if (expectedGeneration == 0L
+                    || lifecycleResult == null
+                    || lifecycleResult.committedOwner != TrackingOwnershipStore.OWNER_GEOFENCE
+                    || lifecycleResult.committedGeneration == 0L
+                    || lifecycleResult.committedGeneration != expectedGeneration) {
+                return;
+            }
             callback = mPendingGeofenceStartCallback;
             mPendingGeofenceStartCallback = null;
+            mPendingGeofenceStartGeneration = 0L;
         }
         if (callback != null) {
             callback.onSuccess();
@@ -666,6 +696,7 @@ public class BackgroundGeolocationFacade {
         synchronized (this) {
             callback = mPendingGeofenceStartCallback;
             mPendingGeofenceStartCallback = null;
+            mPendingGeofenceStartGeneration = 0L;
         }
         if (callback != null) {
             callback.onError(exception);

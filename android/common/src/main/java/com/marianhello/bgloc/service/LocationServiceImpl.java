@@ -124,6 +124,7 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
     private long mServiceId = -1;
     private static boolean sIsRunning = false;
     private boolean mIsInForeground = false;
+    private ServiceLifecycleStateStore mServiceLifecycleStateStore;
 
     private static LocationTransform sLocationTransform;
     private static LocationProviderFactory sLocationProviderFactory;
@@ -173,6 +174,7 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
 
         logger = LoggerManager.getLogger(LocationServiceImpl.class);
         logger.info("Creating LocationServiceImpl");
+        mServiceLifecycleStateStore = new ServiceLifecycleStateStore(getApplicationContext());
 
         mServiceId = System.currentTimeMillis();
 
@@ -250,6 +252,9 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
         unregisterReceiver(connectivityChangeReceiver);
 
         sIsRunning = false;
+        if (mServiceLifecycleStateStore != null) {
+            mServiceLifecycleStateStore.markStopped();
+        }
         super.onDestroy();
     }
 
@@ -376,6 +381,7 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
         Bundle bundle = new Bundle();
         bundle.putInt("action", MSG_ON_SERVICE_STARTED);
         bundle.putLong("serviceId", mServiceId);
+        bundle.putLong("serviceGeneration", mServiceLifecycleStateStore.markStarted());
         broadcastMessage(bundle);
     }
 
@@ -398,7 +404,10 @@ public class LocationServiceImpl extends Service implements ProviderDelegate, Lo
         stopForeground(true);
         stopSelf();
 
-        broadcastMessage(MSG_ON_SERVICE_STOPPED);
+        Bundle bundle = new Bundle();
+        bundle.putInt("action", MSG_ON_SERVICE_STOPPED);
+        bundle.putLong("serviceGeneration", mServiceLifecycleStateStore.markStopped());
+        broadcastMessage(bundle);
         sIsRunning = false;
     }
 

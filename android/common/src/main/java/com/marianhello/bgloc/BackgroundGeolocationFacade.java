@@ -66,6 +66,7 @@ public class BackgroundGeolocationFacade {
     private final Context mContext;
     private final PluginDelegate mDelegate;
     private final LocationService mService;
+    private final TrackingOwnershipStore mTrackingOwnershipStore;
 
     private BackgroundLocation mStationaryLocation;
 
@@ -75,6 +76,7 @@ public class BackgroundGeolocationFacade {
         mContext = context;
         mDelegate = delegate;
         mService = new LocationServiceProxy(context);
+        mTrackingOwnershipStore = new TrackingOwnershipStore(context);
 
         UncaughtExceptionLogger.register(context.getApplicationContext());
 
@@ -213,6 +215,21 @@ public class BackgroundGeolocationFacade {
     }
 
     public void start() {
+        mTrackingOwnershipStore.reconcileWithServiceState(mService.isStarted());
+        mTrackingOwnershipStore.setOwner(TrackingOwnershipStore.OWNER_MANUAL);
+        startInternal();
+    }
+
+    public void startForGeofence() {
+        mTrackingOwnershipStore.reconcileWithServiceState(mService.isStarted());
+        if (mService.isStarted() && mTrackingOwnershipStore.getOwner() == TrackingOwnershipStore.OWNER_MANUAL) {
+            logger.info("Ignoring geofence start because manual tracking owner is active");
+            return;
+        }
+        startInternal();
+    }
+
+    private void startInternal() {
         logger.debug("Starting service");
 
         PermissionManager permissionManager = PermissionManager.getInstance(getContext());
@@ -237,6 +254,7 @@ public class BackgroundGeolocationFacade {
             @Override
             public void onPermissionDenied(DeniedPermissions deniedPermissions) {
                 logger.info("User denied requested permissions");
+                mTrackingOwnershipStore.reconcileWithServiceState(mService.isStarted());
                 if (mDelegate != null) {
                     mDelegate.onAuthorizationChanged(BackgroundGeolocationFacade.AUTHORIZATION_DENIED);
                 }
@@ -252,6 +270,7 @@ public class BackgroundGeolocationFacade {
         // unregisterServiceBroadcast();
 
         stopBackgroundService();
+        mTrackingOwnershipStore.clearOwner();
     }
 
     public void pause() {

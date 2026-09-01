@@ -50,6 +50,7 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
     public static final String HTTP_AUTHORIZATION_EVENT = "http_authorization";
 
     public static final String ACTION_START = "start";
+    public static final String ACTION_START_FOR_GEOFENCE = "startForGeofence";
     public static final String ACTION_STOP = "stop";
     public static final String ACTION_CONFIGURE = "configure";
     public static final String ACTION_SWITCH_MODE = "switchMode";
@@ -150,6 +151,15 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
             runOnWebViewThread(new Runnable() {
                 public void run() {
                     facade.start();
+                    callbackContext.success();
+                }
+            });
+
+            return true;
+        } else if (ACTION_START_FOR_GEOFENCE.equals(action)) {
+            runOnWebViewThread(new Runnable() {
+                public void run() {
+                    facade.startForGeofence();
                     callbackContext.success();
                 }
             });

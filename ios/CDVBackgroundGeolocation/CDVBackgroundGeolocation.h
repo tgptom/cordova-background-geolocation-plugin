@@ -17,6 +17,7 @@
 
 - (void) configure:(CDVInvokedUrlCommand*)command;
 - (void) start:(CDVInvokedUrlCommand*)command;
+- (void) startForGeofence:(CDVInvokedUrlCommand*)command;
 - (void) stop:(CDVInvokedUrlCommand*)command;
 - (void) getConfig:(CDVInvokedUrlCommand*)command;
 - (void) checkStatus:(CDVInvokedUrlCommand*)command;

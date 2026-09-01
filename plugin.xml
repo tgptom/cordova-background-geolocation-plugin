@@ -57,6 +57,9 @@
         <source-file src="android/common/src/main/java/com/marianhello/bgloc/BootCompletedReceiver.java" target-dir="src/com/marianhello/bgloc" />
         <source-file src="android/common/src/main/java/com/marianhello/bgloc/Config.java" target-dir="src/com/marianhello/bgloc" />
         <source-file src="android/common/src/main/java/com/marianhello/bgloc/ConnectivityListener.java" target-dir="src/com/marianhello/bgloc" />
+        <source-file src="android/common/src/main/java/com/marianhello/bgloc/GeofenceTransitionHandler.java" target-dir="src/com/marianhello/bgloc" />
+        <source-file src="android/common/src/main/java/com/marianhello/bgloc/GeofenceOwnershipEvaluator.java" target-dir="src/com/marianhello/bgloc" />
+        <source-file src="android/common/src/main/java/com/marianhello/bgloc/TrackingOwnershipStore.java" target-dir="src/com/marianhello/bgloc" />
         <source-file src="android/common/src/main/java/com/marianhello/bgloc/data/AbstractLocationTemplate.java" target-dir="src/com/marianhello/bgloc/data" />
         <source-file src="android/common/src/main/java/com/marianhello/bgloc/data/ArrayListLocationTemplate.java" target-dir="src/com/marianhello/bgloc/data" />
         <source-file src="android/common/src/main/java/com/marianhello/bgloc/data/BackgroundActivity.java" target-dir="src/com/marianhello/bgloc/data" />
@@ -295,6 +298,8 @@
         <source-file src="ios/common/BackgroundGeolocation/MAURActivityLocationProvider.m" />
         <header-file src="ios/common/BackgroundGeolocation/MAURBackgroundGeolocationFacade.h" />
         <source-file src="ios/common/BackgroundGeolocation/MAURBackgroundGeolocationFacade.m" />
+        <header-file src="ios/common/BackgroundGeolocation/MAURGeofenceTransitionHandler.h" />
+        <source-file src="ios/common/BackgroundGeolocation/MAURGeofenceTransitionHandler.m" />
         <header-file src="ios/common/BackgroundGeolocation/MAURBackgroundSync.h" />
         <source-file src="ios/common/BackgroundGeolocation/MAURBackgroundSync.m" />
         <header-file src="ios/common/BackgroundGeolocation/MAURBackgroundTaskManager.h" />

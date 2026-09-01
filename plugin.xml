@@ -59,6 +59,7 @@
         <source-file src="android/common/src/main/java/com/marianhello/bgloc/ConnectivityListener.java" target-dir="src/com/marianhello/bgloc" />
         <source-file src="android/common/src/main/java/com/marianhello/bgloc/GeofenceTransitionHandler.java" target-dir="src/com/marianhello/bgloc" />
         <source-file src="android/common/src/main/java/com/marianhello/bgloc/GeofenceOwnershipEvaluator.java" target-dir="src/com/marianhello/bgloc" />
+        <source-file src="android/common/src/main/java/com/marianhello/bgloc/TrackingLifecycleCoordinator.java" target-dir="src/com/marianhello/bgloc" />
         <source-file src="android/common/src/main/java/com/marianhello/bgloc/TrackingOwnershipStore.java" target-dir="src/com/marianhello/bgloc" />
         <source-file src="android/common/src/main/java/com/marianhello/bgloc/data/AbstractLocationTemplate.java" target-dir="src/com/marianhello/bgloc/data" />
         <source-file src="android/common/src/main/java/com/marianhello/bgloc/data/ArrayListLocationTemplate.java" target-dir="src/com/marianhello/bgloc/data" />
@@ -105,6 +106,7 @@
         <source-file src="android/common/src/main/java/com/marianhello/bgloc/service/LocationServiceIntentBuilder.java" target-dir="src/com/marianhello/bgloc/service" />
         <source-file src="android/common/src/main/java/com/marianhello/bgloc/service/LocationService.java" target-dir="src/com/marianhello/bgloc/service" />
         <source-file src="android/common/src/main/java/com/marianhello/bgloc/service/LocationServiceProxy.java" target-dir="src/com/marianhello/bgloc/service" />
+        <source-file src="android/common/src/main/java/com/marianhello/bgloc/service/ServiceLifecycleStateStore.java" target-dir="src/com/marianhello/bgloc/service" />
         <source-file src="android/common/src/main/java/com/marianhello/bgloc/sync/AccountHelper.java" target-dir="src/com/marianhello/bgloc/sync" />
         <source-file src="android/common/src/main/java/com/marianhello/bgloc/sync/Authenticator.java" target-dir="src/com/marianhello/bgloc/sync" />
         <source-file src="android/common/src/main/java/com/marianhello/bgloc/sync/AuthenticatorService.java" target-dir="src/com/marianhello/bgloc/sync" />

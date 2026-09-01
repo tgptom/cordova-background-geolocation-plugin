@@ -77,6 +77,22 @@ final class TrackingOwnershipStore {
         return generation;
     }
 
+    long setPendingStartOwnerWithoutDeadline(int owner) {
+        int normalizedOwner = normalizeOwner(owner);
+        if (normalizedOwner == OWNER_NONE) {
+            clearPendingStartOwner();
+            return 0L;
+        }
+
+        long generation = nextGeneration();
+        prefs.edit()
+                .putInt(PENDING_START_OWNER_KEY, normalizedOwner)
+                .remove(PENDING_START_DEADLINE_KEY)
+                .putLong(PENDING_START_GENERATION_KEY, generation)
+                .apply();
+        return generation;
+    }
+
     void clearPendingStartOwner() {
         prefs.edit()
                 .remove(PENDING_START_OWNER_KEY)

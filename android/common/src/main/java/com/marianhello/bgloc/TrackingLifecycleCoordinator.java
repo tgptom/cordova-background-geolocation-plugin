@@ -73,6 +73,12 @@ final class TrackingLifecycleCoordinator {
         return generation;
     }
 
+    synchronized long requestStartIntent(int owner) {
+        ensureReceiverRegistered();
+        clearStartTimeoutLocked();
+        return store.setPendingStartOwnerWithoutDeadline(owner);
+    }
+
     synchronized long requestStop(int owner, long timeoutMs, TimeoutCallback onTimeout) {
         ensureReceiverRegistered();
         long generation = store.setPendingStopOwner(owner, System.currentTimeMillis() + timeoutMs);

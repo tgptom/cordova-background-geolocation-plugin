@@ -45,6 +45,17 @@ public class TrackingOwnershipStoreTest {
     }
 
     @Test
+    public void permissionPendingManualStartDoesNotExpireWithoutDeadline() {
+        long now = System.currentTimeMillis();
+        store.setPendingStartOwnerWithoutDeadline(TrackingOwnershipStore.OWNER_MANUAL);
+
+        TrackingOwnershipStore.ReconciledState state = store.reconcileWithServiceState(false, now + 30000L);
+
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, state.pendingStartOwner);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, store.getPendingStartOwner());
+    }
+
+    @Test
     public void pendingStartRollsBackAfterDeadlineWhenServiceStopped() {
         long now = System.currentTimeMillis();
         store.setPendingStartOwner(TrackingOwnershipStore.OWNER_GEOFENCE, now + 100L);
@@ -84,6 +95,18 @@ public class TrackingOwnershipStoreTest {
         store.onServiceStartedAcknowledged();
 
         Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, store.getOwner());
+    }
+
+    @Test
+    public void clearPendingStartRequiresMatchingGeneration() {
+        long now = System.currentTimeMillis();
+        long firstGeneration = store.setPendingStartOwnerWithoutDeadline(TrackingOwnershipStore.OWNER_MANUAL);
+        long secondGeneration = store.setPendingStartOwner(TrackingOwnershipStore.OWNER_GEOFENCE, now + 15000L);
+
+        store.clearPendingStartOwnerIfGeneration(firstGeneration);
+
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_GEOFENCE, store.getPendingStartOwner());
+        Assert.assertEquals(secondGeneration, store.getPendingStartGeneration());
     }
 
     @Test

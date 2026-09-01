@@ -22,7 +22,7 @@ public class GeofenceTransitionHandlerTest {
     @Test
     public void receiverPathReturnsPromptlyWithoutBlockingWait() {
         TrackingOwnershipStore store = new TrackingOwnershipStore(context);
-        store.setPendingStartOwner(TrackingOwnershipStore.OWNER_MANUAL, System.currentTimeMillis() + 15000L);
+        store.setPendingStartOwnerWithoutDeadline(TrackingOwnershipStore.OWNER_MANUAL);
 
         long startedAtNanos = System.nanoTime();
         GeofenceTransitionHandler.onGeofenceTransition(

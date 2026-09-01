@@ -273,33 +273,18 @@ public class BackgroundGeolocationFacade {
                                final boolean requireGeofenceConfig,
                                final StartRequestCallback geofenceCallback) {
         logger.debug("Starting service");
-        final long pendingGeneration = mLifecycleCoordinator.requestStart(requestedOwner, START_ACK_TIMEOUT_MS, new TrackingLifecycleCoordinator.TimeoutCallback() {
-            @Override
-            public void onTimeout(long generation) {
-                if (requestedOwner == TrackingOwnershipStore.OWNER_GEOFENCE) {
-                    notifyGeofenceStartError(new PluginException(
-                            "Unable to start geofence-owned background geolocation.",
-                            PluginException.START_FAILED_ERROR
-                    ));
-                }
-            }
-        });
+        final long permissionPendingGeneration = requestedOwner == TrackingOwnershipStore.OWNER_MANUAL
+                ? mLifecycleCoordinator.requestStartIntent(requestedOwner)
+                : 0L;
         if (requestedOwner == TrackingOwnershipStore.OWNER_GEOFENCE) {
             setPendingGeofenceStartCallback(geofenceCallback);
         }
 
-        PermissionManager permissionManager = PermissionManager.getInstance(getContext());
-        permissionManager.checkPermissions(Arrays.asList(PERMISSIONS), new PermissionManager.PermissionRequestListener() {
+        requestLocationPermissions(new PermissionManager.PermissionRequestListener() {
             @Override
             public void onPermissionGranted() {
                 logger.info("User granted requested permissions");
-                permissionManager.checkPermissions(Arrays.asList(Manifest.permission.POST_NOTIFICATIONS), new PermissionManager.PermissionRequestListener() {
-                    @Override
-                    public void onPermissionGranted() {} // noop
-        
-                    @Override
-                    public void onPermissionDenied(DeniedPermissions deniedPermissions) {} // noop
-                });
+                requestPostNotificationPermission();
 
                 // watch location mode changes
                 registerLocationModeChangeReceiver();
@@ -308,7 +293,6 @@ public class BackgroundGeolocationFacade {
                 }
 
                 if (requireGeofenceConfig && !isGeofenceStartConfigurationValid()) {
-                    clearPendingStartRequest(pendingGeneration);
                     notifyGeofenceStartError(new PluginException(
                             "Unable to start geofence-owned background geolocation due to invalid configuration.",
                             PluginException.START_FAILED_ERROR
@@ -316,6 +300,17 @@ public class BackgroundGeolocationFacade {
                     return;
                 }
 
+                final long pendingGeneration = mLifecycleCoordinator.requestStart(requestedOwner, START_ACK_TIMEOUT_MS, new TrackingLifecycleCoordinator.TimeoutCallback() {
+                    @Override
+                    public void onTimeout(long generation) {
+                        if (requestedOwner == TrackingOwnershipStore.OWNER_GEOFENCE) {
+                            notifyGeofenceStartError(new PluginException(
+                                    "Unable to start geofence-owned background geolocation.",
+                                    PluginException.START_FAILED_ERROR
+                            ));
+                        }
+                    }
+                });
                 try {
                     startBackgroundService();
                 } catch (SecurityException e) {
@@ -345,12 +340,30 @@ public class BackgroundGeolocationFacade {
             @Override
             public void onPermissionDenied(DeniedPermissions deniedPermissions) {
                 logger.info("User denied requested permissions");
-                clearPendingStartRequest(pendingGeneration);
+                if (permissionPendingGeneration != 0L) {
+                    clearPendingStartRequest(permissionPendingGeneration);
+                }
                 notifyGeofenceStartError(new PluginException("Permission denied", PluginException.PERMISSION_DENIED_ERROR));
                 if (mDelegate != null) {
                     mDelegate.onAuthorizationChanged(BackgroundGeolocationFacade.AUTHORIZATION_DENIED);
                 }
             }
+        });
+    }
+
+    protected void requestLocationPermissions(PermissionManager.PermissionRequestListener listener) {
+        PermissionManager permissionManager = PermissionManager.getInstance(getContext());
+        permissionManager.checkPermissions(Arrays.asList(PERMISSIONS), listener);
+    }
+
+    protected void requestPostNotificationPermission() {
+        PermissionManager permissionManager = PermissionManager.getInstance(getContext());
+        permissionManager.checkPermissions(Arrays.asList(Manifest.permission.POST_NOTIFICATIONS), new PermissionManager.PermissionRequestListener() {
+            @Override
+            public void onPermissionGranted() {} // noop
+
+            @Override
+            public void onPermissionDenied(DeniedPermissions deniedPermissions) {} // noop
         });
     }
 
@@ -569,7 +582,7 @@ public class BackgroundGeolocationFacade {
         mService.registerHeadlessTask(taskRunnerClass);
     }
 
-    private void startBackgroundService() {
+    protected void startBackgroundService() {
         logger.info("Attempt to start bg service");
         if (mIsPaused) {
             mService.startForegroundService();
@@ -578,12 +591,12 @@ public class BackgroundGeolocationFacade {
         }
     }
 
-    private void stopBackgroundService() {
+    protected void stopBackgroundService() {
         logger.info("Attempt to stop bg service");
         mService.stop();
     }
 
-    private boolean isGeofenceStartConfigurationValid() {
+    protected boolean isGeofenceStartConfigurationValid() {
         try {
             Config config = getStoredConfig();
             return config != null && config.hasValidUrl() && Boolean.TRUE.equals(config.getStartForeground());

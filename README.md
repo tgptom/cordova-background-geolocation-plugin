@@ -99,7 +99,7 @@ A more comprehensive example can be found in the [Documentation](https://haylltd
 
 ### Companion geofence integration (`startForGeofence`)
 
-`startForGeofence()` is intended for integration with a companion geofence plugin transition pipeline (currently aligned with `tgptom/cordova-plugin-geofence` PR #10 or successor hardened transition contract). It starts precise background tracking when the companion plugin signals geofence entry/dwell transitions.
+`startForGeofence()` is intended for integration with a companion geofence plugin transition pipeline (currently aligned with `tgptom/cordova-plugin-geofence` PR #11 or successor hardened transition contract). It starts precise background tracking when the companion plugin signals geofence entry/dwell transitions.
 
 This plugin does **not** register geofences. Keep using a geofence plugin to create/remove monitored regions.
 

@@ -14,7 +14,7 @@ import org.json.JSONException;
 @Keep
 public final class GeofenceTransitionHandler {
     public static final String COMPATIBILITY_NOTE =
-            "Companion contract: tgptom/cordova-plugin-geofence PR #10 or successor (hardened geofence transition contract)";
+            "Companion contract: tgptom/cordova-plugin-geofence PR #11 or successor (hardened geofence transition contract)";
 
     private static final String TAG = GeofenceTransitionHandler.class.getName();
     private static final long ACK_TIMEOUT_MS = 15000L;

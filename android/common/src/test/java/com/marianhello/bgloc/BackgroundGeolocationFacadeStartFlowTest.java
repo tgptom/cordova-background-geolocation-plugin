@@ -18,6 +18,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.Shadows;
 
+import java.util.ArrayDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -235,6 +236,105 @@ public class BackgroundGeolocationFacadeStartFlowTest {
         Assert.assertEquals(0, errorCount.get());
     }
 
+    @Test
+    public void runningStaleGenerationQueuesAndReplaysNewerGeofenceRequest() {
+        TestFacade facade = new TestFacade(context, true, false, true);
+        final AtomicInteger staleErrorCount = new AtomicInteger(0);
+        final AtomicInteger newerSuccessCount = new AtomicInteger(0);
+        final AtomicInteger newerErrorCount = new AtomicInteger(0);
+
+        facade.startForGeofence(new BackgroundGeolocationFacade.StartRequestCallback() {
+            @Override
+            public void onSuccess() {
+                Assert.fail("Unexpected stale success callback");
+            }
+
+            @Override
+            public void onError(PluginException exception) {
+                staleErrorCount.incrementAndGet();
+            }
+        });
+        facade.grantLocationPermission();
+        long staleGeneration = coordinator.getPendingStartGeneration();
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(16, TimeUnit.SECONDS);
+        Assert.assertEquals(1, staleErrorCount.get());
+
+        facade.startForGeofence(new BackgroundGeolocationFacade.StartRequestCallback() {
+            @Override
+            public void onSuccess() {
+                newerSuccessCount.incrementAndGet();
+            }
+
+            @Override
+            public void onError(PluginException exception) {
+                newerErrorCount.incrementAndGet();
+            }
+        });
+        facade.grantLocationPermission();
+        long newerGeneration = coordinator.getPendingStartGeneration();
+
+        facade.deliverNextStartCommand();
+        facade.deliverNextStartCommand();
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_GEOFENCE, coordinator.getPendingStartOwner());
+        Assert.assertEquals(newerGeneration, coordinator.getPendingStartGeneration());
+
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(16, TimeUnit.SECONDS);
+        Assert.assertEquals(0, newerSuccessCount.get());
+        Assert.assertEquals(0, newerErrorCount.get());
+
+        dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STOPPED, 0L);
+        dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STARTED, staleGeneration);
+
+        long stopGeneration = coordinator.getPendingStopGeneration();
+        facade.deliverStopAcknowledgement(stopGeneration);
+        dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STOPPED, stopGeneration + 1L);
+        dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STOPPED, stopGeneration);
+
+        facade.deliverNextStartCommand();
+        dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STARTED, newerGeneration + 1L);
+        dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STARTED, newerGeneration);
+
+        Assert.assertEquals(1, newerSuccessCount.get());
+        Assert.assertEquals(0, newerErrorCount.get());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_GEOFENCE, coordinator.getOwner());
+    }
+
+    @Test
+    public void runningStaleGenerationQueuesAndReplaysNewerManualRequest() {
+        TestFacade facade = new TestFacade(context, true, false, true);
+
+        facade.startForGeofence(new BackgroundGeolocationFacade.StartRequestCallback() {
+            @Override
+            public void onSuccess() {
+                Assert.fail("Unexpected stale geofence success callback");
+            }
+
+            @Override
+            public void onError(PluginException exception) {
+                // expected timeout
+            }
+        });
+        facade.grantLocationPermission();
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(16, TimeUnit.SECONDS);
+
+        facade.start();
+        facade.grantLocationPermission();
+        long newerGeneration = coordinator.getPendingStartGeneration();
+
+        facade.deliverNextStartCommand();
+        facade.deliverNextStartCommand();
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, coordinator.getPendingStartOwner());
+        Assert.assertEquals(newerGeneration, coordinator.getPendingStartGeneration());
+
+        long stopGeneration = coordinator.getPendingStopGeneration();
+        facade.deliverStopAcknowledgement(stopGeneration);
+        facade.deliverNextStartCommand();
+        dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STOPPED, stopGeneration + 1L);
+
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_MANUAL, coordinator.getOwner());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, coordinator.getPendingStartOwner());
+    }
+
     private void dispatchLifecycleBroadcast(int action, long requestGeneration) {
         Intent intent = new Intent(LocationServiceImpl.ACTION_BROADCAST);
         intent.putExtra("action", action);
@@ -246,13 +346,21 @@ public class BackgroundGeolocationFacadeStartFlowTest {
         private PermissionManager.PermissionRequestListener locationPermissionListener;
         private final boolean geofenceConfigValid;
         private final boolean throwOnStart;
+        private final boolean emulateRealServiceStartBehavior;
+        private boolean simulatedServiceRunning = false;
+        private final ArrayDeque<Long> startCommandQueue = new ArrayDeque<>();
         int startAttempts = 0;
         long lastStartRequestGeneration = 0L;
 
         TestFacade(Context context, boolean geofenceConfigValid, boolean throwOnStart) {
+            this(context, geofenceConfigValid, throwOnStart, false);
+        }
+
+        TestFacade(Context context, boolean geofenceConfigValid, boolean throwOnStart, boolean emulateRealServiceStartBehavior) {
             super(context, null);
             this.geofenceConfigValid = geofenceConfigValid;
             this.throwOnStart = throwOnStart;
+            this.emulateRealServiceStartBehavior = emulateRealServiceStartBehavior;
         }
 
         @Override
@@ -277,6 +385,34 @@ public class BackgroundGeolocationFacadeStartFlowTest {
             if (throwOnStart) {
                 throw new RuntimeException("Simulated service start dispatch failure");
             }
+            if (emulateRealServiceStartBehavior) {
+                startCommandQueue.add(requestGeneration);
+            }
+        }
+
+        void deliverNextStartCommand() {
+            Long requestGeneration = startCommandQueue.poll();
+            if (requestGeneration == null) {
+                return;
+            }
+            if (simulatedServiceRunning) {
+                return;
+            }
+            simulatedServiceRunning = true;
+            Intent intent = new Intent(LocationServiceImpl.ACTION_BROADCAST);
+            intent.putExtra("action", LocationServiceImpl.MSG_ON_SERVICE_STARTED);
+            intent.putExtra("requestGeneration", requestGeneration);
+            LocalBroadcastManager.getInstance(RuntimeEnvironment.application.getApplicationContext())
+                    .sendBroadcast(intent);
+        }
+
+        void deliverStopAcknowledgement(long requestGeneration) {
+            simulatedServiceRunning = false;
+            Intent intent = new Intent(LocationServiceImpl.ACTION_BROADCAST);
+            intent.putExtra("action", LocationServiceImpl.MSG_ON_SERVICE_STOPPED);
+            intent.putExtra("requestGeneration", requestGeneration);
+            LocalBroadcastManager.getInstance(RuntimeEnvironment.application.getApplicationContext())
+                    .sendBroadcast(intent);
         }
 
         void grantLocationPermission() {

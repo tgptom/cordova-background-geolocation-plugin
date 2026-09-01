@@ -162,11 +162,6 @@ public class BackgroundGeolocationFacade {
 
                 case LocationServiceImpl.MSG_ON_SERVICE_STARTED: {
                     logger.debug("Received MSG_ON_SERVICE_STARTED");
-                    long requestGeneration = bundle.getLong("requestGeneration", 0L);
-                    TrackingLifecycleCoordinator.LifecycleActionResult lifecycleResult =
-                            mLifecycleCoordinator.handleServiceLifecycleAction(action, requestGeneration);
-                    resolvePendingGeofenceStartSuccess(lifecycleResult);
-                    resolvePendingGeofenceStartFailureIfNeeded();
                     if (mDelegate != null) {
                         mDelegate.onServiceStatusChanged(SERVICE_STARTED);
                     }
@@ -175,8 +170,6 @@ public class BackgroundGeolocationFacade {
 
                 case LocationServiceImpl.MSG_ON_SERVICE_STOPPED: {
                     logger.debug("Received MSG_ON_SERVICE_STOPPED");
-                    mLifecycleCoordinator.handleServiceLifecycleAction(action, bundle.getLong("requestGeneration", 0L));
-                    resolvePendingGeofenceStartFailureIfNeeded();
                     if (mDelegate != null) {
                         mDelegate.onServiceStatusChanged(SERVICE_STOPPED);
                     }
@@ -212,6 +205,15 @@ public class BackgroundGeolocationFacade {
         }
     };
 
+    private final TrackingLifecycleCoordinator.LifecycleResultListener lifecycleResultListener =
+            new TrackingLifecycleCoordinator.LifecycleResultListener() {
+                @Override
+                public void onLifecycleResult(TrackingLifecycleCoordinator.LifecycleActionResult lifecycleResult) {
+                    resolvePendingGeofenceStartSuccess(lifecycleResult);
+                    resolvePendingGeofenceStartFailureIfNeeded();
+                }
+            };
+
     @TargetApi(Build.VERSION_CODES.KITKAT)
     private synchronized void registerLocationModeChangeReceiver() {
         if (mLocationModeChangeReceiverRegistered) return;
@@ -233,6 +235,7 @@ public class BackgroundGeolocationFacade {
     private synchronized void registerServiceBroadcast() {
         if (mServiceBroadcastReceiverRegistered) return;
 
+        mLifecycleCoordinator.addLifecycleResultListener(lifecycleResultListener);
         LocalBroadcastManager.getInstance(getContext()).registerReceiver(serviceBroadcastReceiver, new IntentFilter(LocationServiceImpl.ACTION_BROADCAST));
         mServiceBroadcastReceiverRegistered = true;
     }
@@ -244,6 +247,7 @@ public class BackgroundGeolocationFacade {
         if (context != null) {
             LocalBroadcastManager.getInstance(context).unregisterReceiver(serviceBroadcastReceiver);
         }
+        mLifecycleCoordinator.removeLifecycleResultListener(lifecycleResultListener);
 
         mServiceBroadcastReceiverRegistered = false;
     }
@@ -679,6 +683,7 @@ public class BackgroundGeolocationFacade {
             expectedGeneration = mPendingGeofenceStartGeneration;
             if (expectedGeneration == 0L
                     || lifecycleResult == null
+                    || lifecycleResult.eventAction != LocationServiceImpl.MSG_ON_SERVICE_STARTED
                     || lifecycleResult.committedOwner != TrackingOwnershipStore.OWNER_GEOFENCE
                     || lifecycleResult.committedGeneration == 0L
                     || lifecycleResult.committedGeneration != expectedGeneration) {

@@ -1,6 +1,7 @@
 package com.marianhello.bgloc;
 
 import android.content.Context;
+import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -220,6 +221,52 @@ public class TrackingLifecycleCoordinatorTest {
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(16, TimeUnit.SECONDS);
         Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, coordinator.getPendingStartOwner());
         Assert.assertEquals(TrackingOwnershipStore.OWNER_GEOFENCE, coordinator.getOwner());
+    }
+
+    @Test
+    public void rawLifecycleBroadcastIsProcessedOnceAndNotifiesListenersOnce() {
+        final AtomicInteger listenerCount = new AtomicInteger(0);
+        final long[] committedGeneration = new long[]{0L};
+        coordinator.addLifecycleResultListener(new TrackingLifecycleCoordinator.LifecycleResultListener() {
+            @Override
+            public void onLifecycleResult(TrackingLifecycleCoordinator.LifecycleActionResult result) {
+                listenerCount.incrementAndGet();
+                committedGeneration[0] = result.committedGeneration;
+            }
+        });
+
+        long generation = coordinator.requestStart(TrackingOwnershipStore.OWNER_GEOFENCE, 15000L, null);
+        Intent intent = new Intent(LocationServiceImpl.ACTION_BROADCAST);
+        intent.putExtra("action", LocationServiceImpl.MSG_ON_SERVICE_STARTED);
+        intent.putExtra("requestGeneration", generation);
+        LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
+
+        Assert.assertEquals(1, listenerCount.get());
+        Assert.assertEquals(generation, committedGeneration[0]);
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_GEOFENCE, coordinator.getOwner());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, coordinator.getPendingStartOwner());
+    }
+
+    @Test
+    public void removedLifecycleResultListenerDoesNotReceiveFurtherEvents() {
+        final AtomicInteger listenerCount = new AtomicInteger(0);
+        TrackingLifecycleCoordinator.LifecycleResultListener listener =
+                new TrackingLifecycleCoordinator.LifecycleResultListener() {
+                    @Override
+                    public void onLifecycleResult(TrackingLifecycleCoordinator.LifecycleActionResult result) {
+                        listenerCount.incrementAndGet();
+                    }
+                };
+        coordinator.addLifecycleResultListener(listener);
+        coordinator.removeLifecycleResultListener(listener);
+
+        long generation = coordinator.requestStart(TrackingOwnershipStore.OWNER_GEOFENCE, 15000L, null);
+        Intent intent = new Intent(LocationServiceImpl.ACTION_BROADCAST);
+        intent.putExtra("action", LocationServiceImpl.MSG_ON_SERVICE_STARTED);
+        intent.putExtra("requestGeneration", generation);
+        LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
+
+        Assert.assertEquals(0, listenerCount.get());
     }
 
     private static class TestLocationServiceProxy extends LocationServiceProxy {

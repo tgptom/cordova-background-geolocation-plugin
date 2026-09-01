@@ -237,6 +237,61 @@ public class BackgroundGeolocationFacadeStartFlowTest {
     }
 
     @Test
+    public void exactStartBroadcastResolvesGeofenceCallbackWhenCoordinatorReceiverRunsFirst() {
+        TestFacade facade = new TestFacade(context, true, false);
+        final AtomicInteger successCount = new AtomicInteger(0);
+        final AtomicInteger errorCount = new AtomicInteger(0);
+
+        facade.startForGeofence(new BackgroundGeolocationFacade.StartRequestCallback() {
+            @Override
+            public void onSuccess() {
+                successCount.incrementAndGet();
+            }
+
+            @Override
+            public void onError(PluginException exception) {
+                errorCount.incrementAndGet();
+            }
+        });
+        facade.grantLocationPermission();
+        long generation = coordinator.getPendingStartGeneration();
+
+        dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STARTED, generation);
+        dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STARTED, generation);
+
+        Assert.assertEquals(1, successCount.get());
+        Assert.assertEquals(0, errorCount.get());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_GEOFENCE, coordinator.getOwner());
+    }
+
+    @Test
+    public void destroyUnregistersLifecycleObserverAndPreventsCallbackResolution() {
+        TestFacade facade = new TestFacade(context, true, false);
+        final AtomicInteger successCount = new AtomicInteger(0);
+        final AtomicInteger errorCount = new AtomicInteger(0);
+
+        facade.startForGeofence(new BackgroundGeolocationFacade.StartRequestCallback() {
+            @Override
+            public void onSuccess() {
+                successCount.incrementAndGet();
+            }
+
+            @Override
+            public void onError(PluginException exception) {
+                errorCount.incrementAndGet();
+            }
+        });
+        facade.grantLocationPermission();
+        long generation = coordinator.getPendingStartGeneration();
+        facade.destroy();
+
+        dispatchLifecycleBroadcast(LocationServiceImpl.MSG_ON_SERVICE_STARTED, generation);
+
+        Assert.assertEquals(0, successCount.get());
+        Assert.assertEquals(0, errorCount.get());
+    }
+
+    @Test
     public void runningStaleGenerationQueuesAndReplaysNewerGeofenceRequest() {
         TestFacade facade = new TestFacade(context, true, false, true);
         final AtomicInteger staleErrorCount = new AtomicInteger(0);

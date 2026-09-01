@@ -13,12 +13,18 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import com.marianhello.bgloc.service.LocationServiceImpl;
 import com.marianhello.bgloc.service.LocationServiceProxy;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.WeakHashMap;
 
 final class TrackingLifecycleCoordinator {
     interface TimeoutCallback {
         void onTimeout(long generation);
+    }
+
+    interface LifecycleResultListener {
+        void onLifecycleResult(LifecycleActionResult result);
     }
 
     static final class LifecycleActionResult {
@@ -99,6 +105,7 @@ final class TrackingLifecycleCoordinator {
     private final Handler handler;
     private final Map<Long, TimeoutCallback> startTimeoutCallbacks = new HashMap<>();
     private final Map<Long, Integer> stopTimeoutRetries = new HashMap<>();
+    private final Map<LifecycleResultListener, Boolean> lifecycleResultListeners = new WeakHashMap<>();
 
     private boolean receiverRegistered = false;
     private Runnable pendingStartTimeout;
@@ -113,7 +120,8 @@ final class TrackingLifecycleCoordinator {
             }
             int action = extras.getInt("action");
             long requestGeneration = extras.getLong("requestGeneration", 0L);
-            handleServiceLifecycleAction(action, requestGeneration);
+            LifecycleActionResult result = handleServiceLifecycleAction(action, requestGeneration);
+            notifyLifecycleResultListeners(result);
         }
     };
 
@@ -169,6 +177,20 @@ final class TrackingLifecycleCoordinator {
             }
         }
         return state;
+    }
+
+    synchronized void addLifecycleResultListener(LifecycleResultListener listener) {
+        if (listener == null) {
+            return;
+        }
+        lifecycleResultListeners.put(listener, Boolean.TRUE);
+    }
+
+    synchronized void removeLifecycleResultListener(LifecycleResultListener listener) {
+        if (listener == null) {
+            return;
+        }
+        lifecycleResultListeners.remove(listener);
     }
 
     synchronized long requestStart(int owner, long timeoutMs, TimeoutCallback onTimeout) {
@@ -676,5 +698,20 @@ final class TrackingLifecycleCoordinator {
         }
         store.clearPendingStartOwnerIfGeneration(generation);
         notifyStartFailureLocked(generation);
+    }
+
+    private void notifyLifecycleResultListeners(LifecycleActionResult result) {
+        ArrayList<LifecycleResultListener> listeners;
+        synchronized (this) {
+            if (result == null || lifecycleResultListeners.isEmpty()) {
+                return;
+            }
+            listeners = new ArrayList<>(lifecycleResultListeners.keySet());
+        }
+        for (LifecycleResultListener listener : listeners) {
+            if (listener != null) {
+                listener.onLifecycleResult(result);
+            }
+        }
     }
 }

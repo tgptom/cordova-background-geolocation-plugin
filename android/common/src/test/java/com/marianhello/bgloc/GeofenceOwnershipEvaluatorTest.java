@@ -11,7 +11,8 @@ public class GeofenceOwnershipEvaluatorTest {
                 GeofenceOwnershipEvaluator.TRANSITION_EXIT,
                 false,
                 true,
-                TrackingOwnershipStore.OWNER_MANUAL
+                TrackingOwnershipStore.OWNER_MANUAL,
+                TrackingOwnershipStore.OWNER_NONE
         );
 
         Assert.assertFalse(result.shouldStart);
@@ -25,7 +26,8 @@ public class GeofenceOwnershipEvaluatorTest {
                 GeofenceOwnershipEvaluator.TRANSITION_EXIT,
                 false,
                 true,
-                TrackingOwnershipStore.OWNER_GEOFENCE
+                TrackingOwnershipStore.OWNER_GEOFENCE,
+                TrackingOwnershipStore.OWNER_NONE
         );
 
         Assert.assertTrue(result.shouldStop);
@@ -39,7 +41,8 @@ public class GeofenceOwnershipEvaluatorTest {
                 GeofenceOwnershipEvaluator.TRANSITION_EXIT,
                 true,
                 true,
-                TrackingOwnershipStore.OWNER_GEOFENCE
+                TrackingOwnershipStore.OWNER_GEOFENCE,
+                TrackingOwnershipStore.OWNER_NONE
         );
 
         Assert.assertFalse(result.shouldStart);
@@ -52,6 +55,7 @@ public class GeofenceOwnershipEvaluatorTest {
                 GeofenceOwnershipEvaluator.TRANSITION_ENTER,
                 true,
                 false,
+                TrackingOwnershipStore.OWNER_NONE,
                 TrackingOwnershipStore.OWNER_NONE
         );
 
@@ -66,7 +70,8 @@ public class GeofenceOwnershipEvaluatorTest {
                 GeofenceOwnershipEvaluator.TRANSITION_ENTER,
                 true,
                 false,
-                TrackingOwnershipStore.OWNER_MANUAL
+                TrackingOwnershipStore.OWNER_MANUAL,
+                TrackingOwnershipStore.OWNER_NONE
         );
 
         Assert.assertFalse(result.shouldStart);
@@ -80,7 +85,8 @@ public class GeofenceOwnershipEvaluatorTest {
                 GeofenceOwnershipEvaluator.TRANSITION_ENTER,
                 true,
                 false,
-                TrackingOwnershipStore.OWNER_GEOFENCE
+                TrackingOwnershipStore.OWNER_GEOFENCE,
+                TrackingOwnershipStore.OWNER_NONE
         );
 
         Assert.assertTrue(result.shouldStart);
@@ -94,6 +100,35 @@ public class GeofenceOwnershipEvaluatorTest {
                 GeofenceOwnershipEvaluator.TRANSITION_DWELL,
                 true,
                 true,
+                TrackingOwnershipStore.OWNER_GEOFENCE,
+                TrackingOwnershipStore.OWNER_NONE
+        );
+
+        Assert.assertFalse(result.shouldStart);
+        Assert.assertFalse(result.shouldStop);
+    }
+
+    @Test
+    public void pendingManualStartPreventsGeofenceStart() {
+        GeofenceOwnershipEvaluator.Result result = GeofenceOwnershipEvaluator.evaluate(
+                GeofenceOwnershipEvaluator.TRANSITION_ENTER,
+                true,
+                false,
+                TrackingOwnershipStore.OWNER_NONE,
+                TrackingOwnershipStore.OWNER_MANUAL
+        );
+
+        Assert.assertFalse(result.shouldStart);
+        Assert.assertFalse(result.shouldStop);
+    }
+
+    @Test
+    public void pendingGeofenceStartPreventsDuplicateGeofenceStart() {
+        GeofenceOwnershipEvaluator.Result result = GeofenceOwnershipEvaluator.evaluate(
+                GeofenceOwnershipEvaluator.TRANSITION_DWELL,
+                true,
+                false,
+                TrackingOwnershipStore.OWNER_NONE,
                 TrackingOwnershipStore.OWNER_GEOFENCE
         );
 

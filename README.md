@@ -99,7 +99,7 @@ A more comprehensive example can be found in the [Documentation](https://haylltd
 
 ### Companion geofence integration (`startForGeofence`)
 
-`startForGeofence()` is intended for integration with a companion geofence plugin transition pipeline (currently aligned with `tgptom/cordova-plugin-geofence` PR #9 hardened transition contract and future compatible releases). It starts precise background tracking when the companion plugin signals geofence entry/dwell transitions.
+`startForGeofence()` is intended for integration with a companion geofence plugin transition pipeline (currently aligned with `tgptom/cordova-plugin-geofence` PR #10 or successor hardened transition contract). It starts precise background tracking when the companion plugin signals geofence entry/dwell transitions.
 
 This plugin does **not** register geofences. Keep using a geofence plugin to create/remove monitored regions.
 
@@ -112,6 +112,7 @@ This plugin does **not** register geofences. Keep using a geofence plugin to cre
 #### Migration and store-safety notes
 - iOS: set meaningful app-specific `ALWAYS_USAGE_DESCRIPTION` / location purpose strings.
 - Android: ensure foreground-service declarations and user-visible location notification are correctly configured.
+- Android: physical-device validation is still required for modern background-start and foreground-service policy behavior.
 - App UX/policy: provide explicit user controls and disclosures for background tracking, and document how geofence transitions start/stop precise tracking.
 
 ### Compatibility

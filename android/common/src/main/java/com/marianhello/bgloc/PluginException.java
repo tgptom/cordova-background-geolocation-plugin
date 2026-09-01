@@ -11,6 +11,8 @@ public class PluginException extends Exception {
     public static final int CONFIGURE_ERROR = 1002;
     public static final int SERVICE_ERROR = 1003;
     public static final int JSON_ERROR = 1004;
+    public static final int OWNERSHIP_CONFLICT_ERROR = 1005;
+    public static final int START_FAILED_ERROR = 1006;
 
     private Integer code;
 

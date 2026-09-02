@@ -21,6 +21,17 @@ jobs:
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
+          java-version: 11
+          distribution: zulu
+
+      - name: Run Android common unit tests
+        run: |
+          cd android
+          ./gradlew :common:test --no-daemon
+
+      - name: Set up Java for Capacitor Android build
+        uses: actions/setup-java@v4
+        with:
           java-version: 21
           distribution: zulu
 
@@ -47,4 +58,3 @@ jobs:
                       1' android/app/src/main/res/values/strings.xml > temp.xml && mv temp.xml android/app/src/main/res/values/strings.xml
           cd android
           ./gradlew assembleDebug
-

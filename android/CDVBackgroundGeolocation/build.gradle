@@ -3,7 +3,6 @@ apply from: '../common/VERSIONS.gradle'
 
 android {
     compileSdkVersion project.ext.getCompileSdkVersion()
-    buildToolsVersion project.ext.getBuildToolsVersion()
 
     defaultConfig {
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
@@ -25,10 +24,10 @@ android {
 }
 
 dependencies {
-    testCompile testLibs.junit
-    testCompile testLibs.robolectric
-    compile libs.slf4j
-    compile project(':CordovaLib')
-    compile fileTree(dir: 'libs', include: ['*.jar'])
-    compile project(path: ':common')
+    testImplementation testLibs.junit
+    testImplementation testLibs.robolectric
+    implementation libs.slf4j
+    implementation project(':CordovaLib')
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation project(path: ':common')
 }

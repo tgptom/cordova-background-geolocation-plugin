@@ -126,7 +126,7 @@ public class PostLocationTask {
     private void post(final BackgroundLocation location) {
         long locationId = location.getLocationId();
 
-        if (mHasConnectivity && mConfig.hasValidUrl()) {
+        if (mHasConnectivity && mConfig.hasAllowedUrl()) {
             if (postLocation(location)) {
                 mLocationDAO.deleteLocationById(locationId);
 
@@ -138,12 +138,14 @@ public class PostLocationTask {
             mLocationDAO.updateLocationForSync(locationId);
         }
 
-        if (mConfig.hasValidSyncUrl()) {
+        if (mConfig.hasAllowedSyncUrl()) {
             long syncLocationsCount = mLocationDAO.getLocationsForSyncCount(System.currentTimeMillis());
             if (syncLocationsCount >= mConfig.getSyncThreshold()) {
                 logger.debug("Attempt to sync locations: {} threshold: {}", syncLocationsCount, mConfig.getSyncThreshold());
                 mTaskListener.onSyncRequested();
             }
+        } else if (mConfig.hasValidSyncUrl()) {
+            logger.warn("Skipping sync because syncUrl is not HTTPS. Set allowHttp=true only for controlled development environments.");
         }
     }
 
@@ -154,12 +156,12 @@ public class PostLocationTask {
         try {
             jsonLocations.put(mConfig.getTemplate().locationToJson(location));
         } catch (JSONException e) {
-            logger.warn("Location to json failed: {}", location.toString());
+            logger.warn("Location to json failed for locationId={}", location.getLocationId());
             return false;
         }
 
         String url = mConfig.getUrl();
-        logger.debug("Posting json to url: {} headers: {}", url, redactHeaders(mConfig.getHttpHeaders()));
+        logger.debug("Posting location payload with headers: {}", redactHeaders(mConfig.getHttpHeaders()));
         int responseCode;
 
         try {

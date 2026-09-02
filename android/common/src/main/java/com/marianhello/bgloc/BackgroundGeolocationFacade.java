@@ -12,6 +12,7 @@ import android.location.Location;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import androidx.core.content.ContextCompat;
@@ -44,10 +45,10 @@ import org.json.JSONObject;
 import org.slf4j.event.Level;
 
 import java.util.Arrays;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class BackgroundGeolocationFacade {
 
@@ -59,6 +60,15 @@ public class BackgroundGeolocationFacade {
     public static final String[] PERMISSIONS = {
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.ACCESS_FINE_LOCATION,
+    };
+    private static final String[] BACKGROUND_PERMISSION = {
+            Manifest.permission.ACCESS_BACKGROUND_LOCATION
+    };
+    private static final String[] ACTIVITY_RECOGNITION_PERMISSION = {
+            Manifest.permission.ACTIVITY_RECOGNITION
+    };
+    private static final String[] POST_NOTIFICATIONS_PERMISSION = {
+            Manifest.permission.POST_NOTIFICATIONS
     };
 
     private boolean mServiceBroadcastReceiverRegistered = false;
@@ -73,6 +83,7 @@ public class BackgroundGeolocationFacade {
     private final PluginDelegate mDelegate;
     private final LocationService mService;
     private final TrackingLifecycleCoordinator mLifecycleCoordinator;
+    private final Handler mPermissionHandler;
 
     private BackgroundLocation mStationaryLocation;
     private StartRequestCallback mPendingGeofenceStartCallback;
@@ -93,6 +104,7 @@ public class BackgroundGeolocationFacade {
         mDelegate = delegate;
         mService = new LocationServiceProxy(context);
         mLifecycleCoordinator = TrackingLifecycleCoordinator.getInstance(context);
+        mPermissionHandler = new Handler(Looper.getMainLooper());
 
         UncaughtExceptionLogger.register(context.getApplicationContext());
 
@@ -219,6 +231,7 @@ public class BackgroundGeolocationFacade {
                     resolvePendingGeofenceStartFailureIfNeeded();
                 }
             };
+    private PermissionManager.PermissionRequestListener mPendingBackgroundLocationSettingsListener;
 
     @TargetApi(Build.VERSION_CODES.KITKAT)
     private synchronized void registerLocationModeChangeReceiver() {
@@ -296,9 +309,32 @@ public class BackgroundGeolocationFacade {
             setPendingGeofenceStartCallback(geofenceCallback, 0L);
         }
 
+        final AtomicBoolean permissionSettled = new AtomicBoolean(false);
+        final Runnable permissionTimeoutRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (permissionSettled.compareAndSet(false, true)) {
+                    logger.warn("Timed out waiting for location permissions");
+                    clearPendingBackgroundLocationSettingsListener();
+                    if (permissionPendingGeneration != 0L) {
+                        clearPendingStartRequest(permissionPendingGeneration, false);
+                    }
+                    notifyGeofenceStartError(new PluginException("Permission request timed out", PluginException.PERMISSION_DENIED_ERROR));
+                    if (mDelegate != null) {
+                        mDelegate.onAuthorizationChanged(BackgroundGeolocationFacade.AUTHORIZATION_DENIED);
+                    }
+                }
+            }
+        };
+        mPermissionHandler.postDelayed(permissionTimeoutRunnable, getPermissionRequestTimeoutMs());
+
         requestLocationPermissions(new PermissionManager.PermissionRequestListener() {
             @Override
             public void onPermissionGranted() {
+                if (!permissionSettled.compareAndSet(false, true)) {
+                    return;
+                }
+                mPermissionHandler.removeCallbacks(permissionTimeoutRunnable);
                 logger.info("User granted requested permissions");
                 requestPostNotificationPermission();
 
@@ -372,6 +408,10 @@ public class BackgroundGeolocationFacade {
 
             @Override
             public void onPermissionDenied(DeniedPermissions deniedPermissions) {
+                if (!permissionSettled.compareAndSet(false, true)) {
+                    return;
+                }
+                mPermissionHandler.removeCallbacks(permissionTimeoutRunnable);
                 logger.info("User denied requested permissions");
                 if (permissionPendingGeneration != 0L) {
                     clearPendingStartRequest(permissionPendingGeneration, false);
@@ -385,19 +425,68 @@ public class BackgroundGeolocationFacade {
     }
 
     protected void requestLocationPermissions(PermissionManager.PermissionRequestListener listener) {
-        PermissionManager permissionManager = PermissionManager.getInstance(getContext());
-        List<String> permissions = new ArrayList<>(Arrays.asList(PERMISSIONS));
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-                && ContextCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-            permissions.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION);
+        requestPermissions(Arrays.asList(PERMISSIONS), new PermissionManager.PermissionRequestListener() {
+            @Override
+            public void onPermissionGranted() {
+                if (!hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
+                        && !hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                    listener.onPermissionDenied((DeniedPermissions) null);
+                    return;
+                }
+                if (requiresPreciseLocationPermission() && !hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                    logger.warn("Foreground permission grant is approximate-only; precise location is required by current provider.");
+                    listener.onPermissionDenied((DeniedPermissions) null);
+                    return;
+                }
+                requestBackgroundLocationPermissionIfNeeded(listener);
+            }
+
+            @Override
+            public void onPermissionDenied(DeniedPermissions deniedPermissions) {
+                listener.onPermissionDenied(deniedPermissions);
+            }
+        });
+    }
+
+    private void requestBackgroundLocationPermissionIfNeeded(PermissionManager.PermissionRequestListener listener) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || hasPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)) {
+            requestActivityRecognitionPermissionIfNeeded(listener);
+            return;
         }
-        permissionManager.checkPermissions(permissions, listener);
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+            requestPermissions(Arrays.asList(BACKGROUND_PERMISSION), new PermissionManager.PermissionRequestListener() {
+                @Override
+                public void onPermissionGranted() {
+                    requestActivityRecognitionPermissionIfNeeded(listener);
+                }
+
+                @Override
+                public void onPermissionDenied(DeniedPermissions deniedPermissions) {
+                    listener.onPermissionDenied(deniedPermissions);
+                }
+            });
+            return;
+        }
+        setPendingBackgroundLocationSettingsListener(listener);
+        logger.info("Background location requires settings consent on Android 11+; opening app settings for allow-all-the-time.");
+        openApplicationSettingsForBackgroundLocationPermission();
+    }
+
+    private void requestActivityRecognitionPermissionIfNeeded(PermissionManager.PermissionRequestListener listener) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+                || getConfig().getLocationProvider() != Config.ACTIVITY_PROVIDER
+                || hasPermission(Manifest.permission.ACTIVITY_RECOGNITION)) {
+            listener.onPermissionGranted();
+            return;
+        }
+        requestPermissions(Arrays.asList(ACTIVITY_RECOGNITION_PERMISSION), listener);
     }
 
     protected void requestPostNotificationPermission() {
-        PermissionManager permissionManager = PermissionManager.getInstance(getContext());
-        permissionManager.checkPermissions(Arrays.asList(Manifest.permission.POST_NOTIFICATIONS), new PermissionManager.PermissionRequestListener() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || hasPermission(Manifest.permission.POST_NOTIFICATIONS)) {
+            return;
+        }
+        requestPermissions(Arrays.asList(POST_NOTIFICATIONS_PERMISSION), new PermissionManager.PermissionRequestListener() {
             @Override
             public void onPermissionGranted() {} // noop
 
@@ -493,7 +582,7 @@ public class BackgroundGeolocationFacade {
         json.put("pendingStartOwner", state.pendingStartOwner);
         json.put("pendingStopOwner", state.pendingStopOwner);
         json.put("serviceStarted", state.serviceStarted);
-        json.put("hasValidUrl", config != null && config.hasValidUrl());
+        json.put("hasValidUrl", config != null && config.hasAllowedUrl());
         json.put("startForegroundEnabled", config != null && Boolean.TRUE.equals(config.getStartForeground()));
         return json;
     }
@@ -506,6 +595,7 @@ public class BackgroundGeolocationFacade {
     public void resume() {
         mIsPaused = false;
         mService.stopHeadlessTask();
+        retryPendingBackgroundLocationSettingsPermission();
         if (!getConfig().getStartForeground()) {
             mService.stopForeground();
         }
@@ -513,6 +603,7 @@ public class BackgroundGeolocationFacade {
 
     public void destroy() {
         logger.info("Destroying plugin");
+        clearPendingBackgroundLocationSettingsListener();
 
         unregisterLocationModeChangeReceiver();
         unregisterServiceBroadcast();
@@ -668,6 +759,10 @@ public class BackgroundGeolocationFacade {
         return hasPermissions() ? AUTHORIZATION_AUTHORIZED : AUTHORIZATION_DENIED;
     }
 
+    public boolean hasNotificationPermission() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || hasPermission(Manifest.permission.POST_NOTIFICATIONS);
+    }
+
     public boolean hasPermissions() {
         return hasPermissions(getContext(), PERMISSIONS);
     }
@@ -731,7 +826,7 @@ public class BackgroundGeolocationFacade {
     protected boolean isGeofenceStartConfigurationValid() {
         try {
             Config config = getStoredConfig();
-            return config != null && config.hasValidUrl() && Boolean.TRUE.equals(config.getStartForeground());
+            return config != null && config.hasAllowedUrl() && Boolean.TRUE.equals(config.getStartForeground());
         } catch (PluginException e) {
             logger.error("Unable to validate geofence start configuration", e);
             return false;
@@ -755,6 +850,53 @@ public class BackgroundGeolocationFacade {
         } else {
             mLifecycleCoordinator.clearPendingStartRequestOnly(generation);
         }
+    }
+
+    private void retryPendingBackgroundLocationSettingsPermission() {
+        PermissionManager.PermissionRequestListener listener = consumePendingBackgroundLocationSettingsListener();
+        if (listener == null) {
+            return;
+        }
+        if (hasPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)) {
+            requestActivityRecognitionPermissionIfNeeded(listener);
+        } else {
+            listener.onPermissionDenied((DeniedPermissions) null);
+        }
+    }
+
+    private synchronized void setPendingBackgroundLocationSettingsListener(PermissionManager.PermissionRequestListener listener) {
+        mPendingBackgroundLocationSettingsListener = listener;
+    }
+
+    private synchronized PermissionManager.PermissionRequestListener consumePendingBackgroundLocationSettingsListener() {
+        PermissionManager.PermissionRequestListener listener = mPendingBackgroundLocationSettingsListener;
+        mPendingBackgroundLocationSettingsListener = null;
+        return listener;
+    }
+
+    private synchronized void clearPendingBackgroundLocationSettingsListener() {
+        mPendingBackgroundLocationSettingsListener = null;
+    }
+
+    protected void openApplicationSettingsForBackgroundLocationPermission() {
+        showAppSettings(getContext());
+    }
+
+    protected boolean hasPermission(String permission) {
+        return ContextCompat.checkSelfPermission(getContext(), permission) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean requiresPreciseLocationPermission() {
+        return getConfig().getLocationProvider() != Config.RAW_PROVIDER;
+    }
+
+    protected void requestPermissions(List<String> permissions, PermissionManager.PermissionRequestListener listener) {
+        PermissionManager permissionManager = PermissionManager.getInstance(getContext());
+        permissionManager.checkPermissions(permissions, listener);
+    }
+
+    protected long getPermissionRequestTimeoutMs() {
+        return PERMISSION_PENDING_TIMEOUT_MS;
     }
 
     private void resolvePendingGeofenceStartSuccess(TrackingLifecycleCoordinator.LifecycleActionResult lifecycleResult) {

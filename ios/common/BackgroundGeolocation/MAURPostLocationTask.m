@@ -92,21 +92,25 @@ static MAURLocationTransform s_locationTransform = nil;
         // TODO: investigate location id always 0
         NSNumber *locationId = [locationDAO persistLocation:location limitRows:_config.maxLocations.integerValue];
         
-        if (hasConnectivity && [self.config hasValidUrl]) {
+        if (hasConnectivity && [self.config hasAllowedUrl]) {
             NSError *error = nil;
             if ([self post:location toUrl:self.config.url withTemplate:self.config._template withHttpHeaders:self.config.httpHeaders error:&error]) {
                 if (locationId != nil) {
                     [locationDAO deleteLocation:locationId error:nil];
                 }
             }
+        } else if ([self.config hasValidUrl]) {
+            DDLogWarn(@"%@ Skipping location upload because url is not HTTPS. Set allowHttp=true only for controlled development environments.", TAG);
         }
 
-        if ([self.config hasValidSyncUrl]) {
+        if ([self.config hasAllowedSyncUrl]) {
             NSNumber *locationsCount = [locationDAO getLocationsForSyncCount];
             if (locationsCount && [locationsCount integerValue] >= self.config.syncThreshold.integerValue) {
                 DDLogDebug(@"%@ Attempt to sync locations: %@ threshold: %@", TAG, locationsCount, self.config.syncThreshold);
                 [self sync];
             }
+        } else if ([self.config hasValidSyncUrl]) {
+            DDLogWarn(@"%@ Skipping sync because syncUrl is not HTTPS. Set allowHttp=true only for controlled development environments.", TAG);
         }
     });
 }
@@ -120,8 +124,6 @@ static MAURLocationTransform s_locationTransform = nil;
         return NO;
     }
     
-    NSString *jsonStr = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-    
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:url]];
     [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
     [request setHTTPMethod:@"POST"];
@@ -131,7 +133,7 @@ static MAURLocationTransform s_locationTransform = nil;
             [request addValue:value forHTTPHeaderField:key];
         }
     }
-    [request setHTTPBody:[jsonStr dataUsingEncoding:NSUTF8StringEncoding]];
+    [request setHTTPBody:data];
     
     __block NSHTTPURLResponse* urlResponse = nil;
     __block NSError *requestError = nil;

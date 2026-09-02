@@ -9,8 +9,8 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  android:
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
@@ -20,35 +20,36 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
-          java-version: 11
-          distribution: zulu
-
-      - name: Run Android common unit tests
-        run: |
-          cd android
-          ./gradlew :common:test :CDVBackgroundGeolocation:test --no-daemon
-
-      - name: Set up Java for Capacitor Android build
-        uses: actions/setup-java@v4
-        with:
-          java-version: 21
+          java-version: 17
           distribution: zulu
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Create local package
-        run: npm pack
+      - name: Run lint and Android tests
+        run: |
+          npm run lint
+          npm run test:android
+
+      - name: Validate merged Android manifest generation
+        run: |
+          cd android
+          ./gradlew :CDVBackgroundGeolocation:processDebugMainManifest --no-daemon
+          test -f CDVBackgroundGeolocation/build/intermediates/merged_manifests/debug/AndroidManifest.xml
+
+      - name: Run package checks
+        run: npm run pack:check
 
       - name: Create capacitor app and build it
         run: | 
           npm init @capacitor/app temp -- --name temp --app-id temp.com
           cd temp
-          npm install
+          npm ci
           npm i ../*.tgz
           npm install @capacitor/android
           npx cap add android
@@ -63,14 +64,19 @@ jobs:
           ./gradlew assembleDebug
 
   ios-tests:
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Run iOS native tests
-        run: |
-          xcodebuild test \
-            -project ios/common/BackgroundGeolocation.xcodeproj \
-            -target BackgroundGeolocationTests \
-            -destination 'platform=iOS Simulator,name=iPhone 15'
+        run: npm run test:ios

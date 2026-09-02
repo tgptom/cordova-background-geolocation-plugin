@@ -249,10 +249,10 @@ FMDBLogger *sqliteLogger;
 
     if (owner == MAURTrackingOwnerGeofence) {
         MAURConfig *effectiveConfig = [self getConfig];
-        if (![effectiveConfig hasValidUrl] || [effectiveConfig stopOnTerminate]) {
+        if (![effectiveConfig hasAllowedUrl] || [effectiveConfig stopOnTerminate]) {
             if (outError != nil) {
-                NSString *errorMessage = ![effectiveConfig hasValidUrl]
-                    ? @"Unable to start geofence-owned background geolocation due to invalid URL configuration."
+                NSString *errorMessage = ![effectiveConfig hasAllowedUrl]
+                    ? @"Unable to start geofence-owned background geolocation due to invalid or non-HTTPS URL configuration."
                     : @"Unable to start geofence-owned background geolocation when stopOnTerminate is enabled.";
                 *outError = [NSError errorWithDomain:BGGeolocationDomain
                                                 code:MAURBGStartFailed

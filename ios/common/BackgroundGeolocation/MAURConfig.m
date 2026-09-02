@@ -12,7 +12,7 @@
 
 @implementation MAURConfig 
 
-@synthesize stationaryRadius, distanceFilter, desiredAccuracy, _debug, activityType, activitiesInterval, _stopOnTerminate, url, syncUrl, syncThreshold, httpHeaders, _saveBatteryOnBackground, maxLocations, _pauseLocationUpdates, locationProvider, _template;
+@synthesize stationaryRadius, distanceFilter, desiredAccuracy, _debug, activityType, activitiesInterval, _stopOnTerminate, url, syncUrl, syncThreshold, allowHttp, httpHeaders, _saveBatteryOnBackground, maxLocations, _pauseLocationUpdates, locationProvider, _template;
 
 -(instancetype) initWithDefaults {
     self = [super init];
@@ -31,6 +31,7 @@
     _saveBatteryOnBackground = [NSNumber numberWithBool:NO];
     maxLocations = [NSNumber numberWithInt:10000];
     syncThreshold = [NSNumber numberWithInt:100];
+    allowHttp = [NSNumber numberWithBool:NO];
     _pauseLocationUpdates = [NSNumber numberWithBool:NO];
     locationProvider = [NSNumber numberWithInt:DISTANCE_FILTER_PROVIDER];
 //    template =
@@ -71,6 +72,9 @@
     }
     if (isNotNull(config[@"syncThreshold"])) {
         instance.syncThreshold = config[@"syncThreshold"];
+    }
+    if (isNotNull(config[@"allowHttp"])) {
+        instance.allowHttp = config[@"allowHttp"];
     }
     if (config[@"httpHeaders"] != nil) {
         instance.httpHeaders = config[@"httpHeaders"];
@@ -136,6 +140,9 @@
     if ([newConfig hasSyncThreshold]) {
         merger.syncThreshold = newConfig.syncThreshold;
     }
+    if (newConfig.allowHttp != nil) {
+        merger.allowHttp = newConfig.allowHttp;
+    }
     if ([newConfig hasHttpHeaders]) {
         merger.httpHeaders = newConfig.httpHeaders;
     }
@@ -172,6 +179,7 @@
         copy.url = url;
         copy.syncUrl = syncUrl;
         copy.syncThreshold = syncThreshold;
+        copy.allowHttp = allowHttp;
         copy.httpHeaders = httpHeaders;
         copy._saveBatteryOnBackground = _saveBatteryOnBackground;
         copy.maxLocations = maxLocations;
@@ -228,6 +236,11 @@
     return url != nil && url.length > 0;
 }
 
+- (BOOL) hasAllowedUrl
+{
+    return [self hasValidUrl] && [self isUrlSchemeAllowed:url];
+}
+
 - (void) setUrl:(NSString*)newUrl
 {
     if (newUrl == (id)[NSNull null]) {
@@ -253,6 +266,11 @@
 - (BOOL) hasValidSyncUrl
 {
     return syncUrl != nil && syncUrl.length > 0;
+}
+
+- (BOOL) hasAllowedSyncUrl
+{
+    return [self hasValidSyncUrl] && [self isUrlSchemeAllowed:syncUrl];
 }
 
 - (void) setSyncUrl:(NSString*)newSyncUrl
@@ -460,6 +478,7 @@
     if ([self hasActivitiesInterval]) [dict setObject:self.activitiesInterval forKey:@"activitiesInterval"];
     if ([self hasUrl]) [dict setObject:self.url forKey:@"url"];
     if ([self hasSyncUrl]) [dict setObject:self.syncUrl forKey:@"syncUrl"];
+    if (self.allowHttp != nil) [dict setObject:self.allowHttp forKey:@"allowHttp"];
     if ([self hasHttpHeaders]) [dict setObject:self.httpHeaders forKey:@"httpHeaders"];
     if ([self hasStationaryRadius]) [dict setObject:self.stationaryRadius forKey:@"stationaryRadius"];
     if ([self hasDistanceFilter]) [dict setObject:self.distanceFilter forKey:@"distanceFilter"];
@@ -478,8 +497,62 @@
 
 - (NSString *) description
 {
-    return [NSString stringWithFormat:@"Config: distanceFilter=%@ stationaryRadius=%@ desiredAccuracy=%@ activityType=%@ activitiesInterval=%@ isDebugging=%@ stopOnTerminate=%@ url=%@ syncThreshold=%@ maxLocations=%@ httpHeaders=%@ pauseLocationUpdates=%@ saveBatteryOnBackground=%@ locationProvider=%@ postTemplate=%@", self.distanceFilter, self.stationaryRadius, self.desiredAccuracy, self.activityType, self.activitiesInterval, self._debug, self._stopOnTerminate, self.url, self.syncThreshold, self.maxLocations, self.httpHeaders, self._pauseLocationUpdates, self._saveBatteryOnBackground, self.locationProvider, self._template];
+    return [NSString stringWithFormat:@"Config: distanceFilter=%@ stationaryRadius=%@ desiredAccuracy=%@ activityType=%@ activitiesInterval=%@ isDebugging=%@ stopOnTerminate=%@ url=%@ syncThreshold=%@ maxLocations=%@ allowHttp=%@ httpHeaders=%@ pauseLocationUpdates=%@ saveBatteryOnBackground=%@ locationProvider=%@ postTemplate=%@",
+            self.distanceFilter,
+            self.stationaryRadius,
+            self.desiredAccuracy,
+            self.activityType,
+            self.activitiesInterval,
+            self._debug,
+            self._stopOnTerminate,
+            [self redactedUrl:self.url],
+            self.syncThreshold,
+            self.maxLocations,
+            self.allowHttp != nil ? self.allowHttp : @NO,
+            [self redactedHeaders:self.httpHeaders],
+            self._pauseLocationUpdates,
+            self._saveBatteryOnBackground,
+            self.locationProvider,
+            self._template];
 
+}
+
+- (BOOL) isUrlSchemeAllowed:(NSString*)candidateUrl
+{
+    NSURL *parsedUrl = [NSURL URLWithString:candidateUrl];
+    NSString *scheme = parsedUrl.scheme.lowercaseString;
+    if ([scheme isEqualToString:@"https"]) {
+        return YES;
+    }
+    if ([scheme isEqualToString:@"http"]) {
+        return [self.allowHttp boolValue];
+    }
+    return YES;
+}
+
+- (NSString*) redactedUrl:(NSString*)rawUrl
+{
+    if (rawUrl == nil || rawUrl.length == 0) {
+        return rawUrl;
+    }
+    NSURL *parsedUrl = [NSURL URLWithString:rawUrl];
+    if (parsedUrl.host == nil) {
+        return @"***REDACTED***";
+    }
+    NSString *scheme = parsedUrl.scheme != nil ? parsedUrl.scheme : @"https";
+    return [NSString stringWithFormat:@"%@://%@/***", scheme, parsedUrl.host];
+}
+
+- (NSDictionary*) redactedHeaders:(NSDictionary*)headers
+{
+    if (headers == nil) {
+        return @{};
+    }
+    NSMutableDictionary *redacted = [NSMutableDictionary dictionaryWithCapacity:headers.count];
+    for (id key in headers) {
+        redacted[key] = @"***REDACTED***";
+    }
+    return redacted;
 }
 
 @end

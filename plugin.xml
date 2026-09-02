@@ -141,6 +141,7 @@
             <service
                 android:name="com.marianhello.bgloc.sync.SyncService"
                 android:exported="true"
+                android:permission="android.permission.BIND_SYNC_ADAPTER"
                 android:process=":sync">
                 <intent-filter>
                     <action android:name="android.content.SyncAdapter"/>
@@ -150,7 +151,8 @@
             </service>
             <service
                 android:name="com.marianhello.bgloc.sync.AuthenticatorService"
-                android:exported="false">
+                android:exported="false"
+                android:permission="android.permission.BIND_ACCOUNT_AUTHENTICATOR">
                 <intent-filter>
                     <action android:name="android.accounts.AccountAuthenticator"/>
                 </intent-filter>
@@ -249,19 +251,6 @@
         <config-file target="*-Info.plist" parent="UIBackgroundModes">
             <array>
                 <string>location</string>
-            </array>
-        </config-file>
-
-        <config-file target="*-Info.plist" parent="CFBundleURLTypes">
-            <array>
-              <dict>
-                <key>CFBundleTypeRole</key>
-                <string>Editor</string>
-                <key>CFBundleURLSchemes</key>
-                <array>
-                  <string>prefs</string>
-                </array>
-              </dict>
             </array>
         </config-file>
 

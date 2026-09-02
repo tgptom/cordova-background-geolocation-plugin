@@ -8,6 +8,8 @@
 
 #import <XCTest/XCTest.h>
 #import "MAURConfig.h"
+#import "MAURGeofenceTransitionHandler.h"
+#import "MAURBackgroundGeolocationFacade.h"
 
 @interface MAURConfigTest : XCTestCase
 
@@ -156,6 +158,45 @@
     XCTAssertEqualObjects(merger.syncUrl, @"");
     XCTAssertEqualObjects(merger.httpHeaders, @{});
     XCTAssertEqualObjects(merger._template, [MAURConfig getDefaultTemplate]);
+}
+
+- (void)testGeofenceTransitionExitStopsOnlyForGeofenceOwner {
+    MAURGeofenceTransitionAction shouldStop = [MAURGeofenceTransitionHandler actionForTransitionType:2
+                                                                             hasActiveInsideGeofence:NO
+                                                                                        trackingOwner:MAURTrackingOwnerGeofence
+                                                                                          hasValidUrl:YES
+                                                                                      stopOnTerminate:NO];
+    XCTAssertEqual(shouldStop, MAURGeofenceTransitionActionStop);
+
+    MAURGeofenceTransitionAction shouldIgnore = [MAURGeofenceTransitionHandler actionForTransitionType:2
+                                                                               hasActiveInsideGeofence:NO
+                                                                                          trackingOwner:MAURTrackingOwnerManual
+                                                                                            hasValidUrl:YES
+                                                                                        stopOnTerminate:NO];
+    XCTAssertEqual(shouldIgnore, MAURGeofenceTransitionActionIgnore);
+}
+
+- (void)testGeofenceTransitionEnterIgnoresManualOwnerAndStartsForValidConfig {
+    MAURGeofenceTransitionAction manualOwner = [MAURGeofenceTransitionHandler actionForTransitionType:1
+                                                                              hasActiveInsideGeofence:YES
+                                                                                         trackingOwner:MAURTrackingOwnerManual
+                                                                                           hasValidUrl:YES
+                                                                                       stopOnTerminate:NO];
+    XCTAssertEqual(manualOwner, MAURGeofenceTransitionActionIgnore);
+
+    MAURGeofenceTransitionAction invalidConfig = [MAURGeofenceTransitionHandler actionForTransitionType:1
+                                                                                hasActiveInsideGeofence:YES
+                                                                                           trackingOwner:MAURTrackingOwnerNone
+                                                                                             hasValidUrl:NO
+                                                                                         stopOnTerminate:NO];
+    XCTAssertEqual(invalidConfig, MAURGeofenceTransitionActionIgnore);
+
+    MAURGeofenceTransitionAction valid = [MAURGeofenceTransitionHandler actionForTransitionType:1
+                                                                        hasActiveInsideGeofence:YES
+                                                                                   trackingOwner:MAURTrackingOwnerNone
+                                                                                     hasValidUrl:YES
+                                                                                 stopOnTerminate:NO];
+    XCTAssertEqual(valid, MAURGeofenceTransitionActionStart);
 }
 
 @end

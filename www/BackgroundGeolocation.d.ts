@@ -434,6 +434,16 @@ export interface ServiceStatus {
   authorization: AuthorizationStatus;
 }
 
+export interface GeofenceCompanionStatus {
+  compatibilityNote: string;
+  trackingOwner: number;
+  pendingStartOwner: number;
+  pendingStopOwner: number;
+  serviceStarted: boolean;
+  hasValidUrl: boolean;
+  startForegroundEnabled: boolean;
+}
+
 export interface LogEntry {
   /** ID of log entry as stored in db. */
   id: number;
@@ -526,6 +536,14 @@ export interface BackgroundGeolocationPlugin {
    * Platform: iOS, Android
    */
   stop(): Promise<void>;
+
+  /**
+   * Stop tracking only when currently owned by geofence integration.
+   * No-op when manual tracking ownership is active.
+   *
+   * Platform: iOS, Android
+   */
+  stopForGeofence(): Promise<void>;
 
   /**
    * One time location check to get current location of the device.
@@ -681,6 +699,16 @@ export interface BackgroundGeolocationPlugin {
     success?: () => void,
     fail?: (error: BackgroundGeolocationError) => void
   ): Promise<void>;
+
+  /**
+   * Get companion geofence integration status and compatibility note.
+   *
+   * Platform: iOS, Android
+   */
+  getGeofenceCompanionStatus(
+    success?: (status: GeofenceCompanionStatus) => void,
+    fail?: (error: BackgroundGeolocationError) => void
+  ): Promise<GeofenceCompanionStatus>;
 
   /**
    * Get stored configuration options.

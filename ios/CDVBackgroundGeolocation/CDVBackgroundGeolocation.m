@@ -13,6 +13,7 @@
 #import "MAURConfig.h"
 #import "MAURBackgroundGeolocationFacade.h"
 #import "MAURBackgroundTaskManager.h"
+#import "MAURGeofenceTransitionHandler.h"
 
 static NSString * const TAG = @"CDVBackgroundGeolocation";
 
@@ -131,6 +132,22 @@ static NSString * const TAG = @"CDVBackgroundGeolocation";
         }
         CDVPluginResult* result = nil;
         if ([facade configure:config error:&error]) {
+            result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+        } else {
+            result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsDictionary:[self errorToDictionary:error]];
+        }
+        [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+    }];
+}
+
+- (void) stopForGeofence:(CDVInvokedUrlCommand*)command
+{
+    NSLog(@"%@ #%@", TAG, @"stopForGeofence");
+    [self.commandDelegate runInBackground:^{
+        NSError *error = nil;
+        BOOL stopped = [facade stopForOwner:MAURTrackingOwnerGeofence error:&error];
+        CDVPluginResult* result;
+        if (stopped && error == nil) {
             result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
         } else {
             result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsDictionary:[self errorToDictionary:error]];
@@ -358,6 +375,23 @@ static NSString * const TAG = @"CDVBackgroundGeolocation";
     [facade forceSync];
     CDVPluginResult *result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
     [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+}
+
+- (void) getGeofenceCompanionStatus:(CDVInvokedUrlCommand*)command
+{
+    [self.commandDelegate runInBackground:^{
+        MAURConfig *cfg = [facade getConfig];
+        NSMutableDictionary *dict = [NSMutableDictionary dictionaryWithCapacity:7];
+        dict[@"compatibilityNote"] = @"Companion contract: tgptom/cordova-plugin-geofence PR #11 or successor (hardened geofence transition contract)";
+        dict[@"trackingOwner"] = @([facade trackingOwner]);
+        dict[@"pendingStartOwner"] = @0;
+        dict[@"pendingStopOwner"] = @0;
+        dict[@"serviceStarted"] = @([facade isStarted]);
+        dict[@"hasValidUrl"] = @([cfg hasValidUrl]);
+        dict[@"startForegroundEnabled"] = @(![cfg stopOnTerminate]);
+        CDVPluginResult *result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:dict];
+        [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+    }];
 }
 
 - (void) addEventListener:(CDVInvokedUrlCommand*)command

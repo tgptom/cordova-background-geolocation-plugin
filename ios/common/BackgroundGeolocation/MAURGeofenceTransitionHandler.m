@@ -15,6 +15,31 @@ static NSString * const MAURGeofenceTransitionLogTag = @"BgGeoGeofence";
 
 @implementation MAURGeofenceTransitionHandler
 
++ (MAURGeofenceTransitionAction)actionForTransitionType:(NSInteger)transitionType
+                               hasActiveInsideGeofence:(BOOL)hasActiveInsideGeofence
+                                          trackingOwner:(NSInteger)trackingOwner
+                                            hasValidUrl:(BOOL)hasValidUrl
+                                        stopOnTerminate:(BOOL)stopOnTerminate
+{
+    if (transitionType == MAURGeofenceTransitionExit) {
+        if (hasActiveInsideGeofence || trackingOwner != MAURTrackingOwnerGeofence) {
+            return MAURGeofenceTransitionActionIgnore;
+        }
+        return MAURGeofenceTransitionActionStop;
+    }
+
+    if (transitionType != MAURGeofenceTransitionEnter &&
+        transitionType != MAURGeofenceTransitionDwell) {
+        return MAURGeofenceTransitionActionIgnore;
+    }
+
+    if (!hasActiveInsideGeofence || !hasValidUrl || stopOnTerminate || trackingOwner == MAURTrackingOwnerManual) {
+        return MAURGeofenceTransitionActionIgnore;
+    }
+
+    return MAURGeofenceTransitionActionStart;
+}
+
 + (void)load
 {
     [[NSNotificationCenter defaultCenter] addObserver:self
@@ -31,8 +56,33 @@ static NSString * const MAURGeofenceTransitionLogTag = @"BgGeoGeofence";
 
     dispatch_async(dispatch_get_main_queue(), ^{
         MAURBackgroundGeolocationFacade *facade = [MAURBackgroundGeolocationFacade sharedInstance];
+        MAURConfig *config = [facade getConfig];
+        MAURTrackingOwner trackingOwner = [facade trackingOwner];
+        MAURGeofenceTransitionAction action = [self actionForTransitionType:transitionType
+                                                  hasActiveInsideGeofence:hasActiveInsideGeofence
+                                                             trackingOwner:trackingOwner
+                                                               hasValidUrl:[config hasValidUrl]
+                                                           stopOnTerminate:[config stopOnTerminate]];
 
-        if (transitionType == MAURGeofenceTransitionExit) {
+        if (action == MAURGeofenceTransitionActionIgnore) {
+            if (transitionType == MAURGeofenceTransitionExit && hasActiveInsideGeofence) {
+                DDLogInfo(@"%@ ignored EXIT: another geofence is still active", MAURGeofenceTransitionLogTag);
+            } else if (transitionType == MAURGeofenceTransitionExit && trackingOwner != MAURTrackingOwnerGeofence) {
+                DDLogInfo(@"%@ ignored EXIT: tracking owner is not geofence", MAURGeofenceTransitionLogTag);
+            } else if ((transitionType == MAURGeofenceTransitionEnter || transitionType == MAURGeofenceTransitionDwell)
+                       && !hasActiveInsideGeofence) {
+                DDLogInfo(@"%@ ignored ENTER/DWELL: no active inside geofence", MAURGeofenceTransitionLogTag);
+            } else if ((transitionType == MAURGeofenceTransitionEnter || transitionType == MAURGeofenceTransitionDwell)
+                       && trackingOwner == MAURTrackingOwnerManual) {
+                DDLogInfo(@"%@ ignored ENTER/DWELL: manual owner is active", MAURGeofenceTransitionLogTag);
+            } else {
+                DDLogWarn(@"%@ ignored ENTER/DWELL: persisted configuration cannot run after termination",
+                          MAURGeofenceTransitionLogTag);
+            }
+            return;
+        }
+
+        if (action == MAURGeofenceTransitionActionStop) {
             if (hasActiveInsideGeofence) {
                 DDLogInfo(@"%@ ignored EXIT: another geofence is still active", MAURGeofenceTransitionLogTag);
                 return;
@@ -52,23 +102,6 @@ static NSString * const MAURGeofenceTransitionLogTag = @"BgGeoGeofence";
             }
 
             DDLogInfo(@"%@ stopped precise tracking after EXIT", MAURGeofenceTransitionLogTag);
-            return;
-        }
-
-        if (transitionType != MAURGeofenceTransitionEnter &&
-            transitionType != MAURGeofenceTransitionDwell) {
-            return;
-        }
-
-        if (!hasActiveInsideGeofence) {
-            DDLogInfo(@"%@ ignored ENTER/DWELL: no active inside geofence", MAURGeofenceTransitionLogTag);
-            return;
-        }
-
-        MAURConfig *config = [facade getConfig];
-        if (![config hasValidUrl] || [config stopOnTerminate]) {
-            DDLogWarn(@"%@ ignored ENTER/DWELL: persisted configuration cannot run after termination",
-                      MAURGeofenceTransitionLogTag);
             return;
         }
 

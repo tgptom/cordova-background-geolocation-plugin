@@ -52,6 +52,7 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
     public static final String ACTION_START = "start";
     public static final String ACTION_START_FOR_GEOFENCE = "startForGeofence";
     public static final String ACTION_STOP = "stop";
+    public static final String ACTION_STOP_FOR_GEOFENCE = "stopForGeofence";
     public static final String ACTION_CONFIGURE = "configure";
     public static final String ACTION_SWITCH_MODE = "switchMode";
     public static final String ACTION_LOCATION_ENABLED_CHECK = "isLocationEnabled";
@@ -72,12 +73,14 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
     public static final String ACTION_END_TASK = "endTask";
     public static final String ACTION_REGISTER_HEADLESS_TASK = "registerHeadlessTask";
     public static final String ACTION_FORCE_SYNC = "forceSync";
+    public static final String ACTION_GET_GEOFENCE_COMPANION_STATUS = "getGeofenceCompanionStatus";
 
     private BackgroundGeolocationFacade facade;
 
     private CallbackContext callbackContext;
 
     private org.slf4j.Logger logger;
+    private CallbackContext pendingStopCallbackContext;
 
     public static class ErrorPluginResult {
         public static PluginResult from(String message, int code) {
@@ -177,8 +180,34 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
         } else if (ACTION_STOP.equals(action)) {
             runOnWebViewThread(new Runnable() {
                 public void run() {
+                    boolean wasRunning = facade.isRunning();
+                    if (wasRunning) {
+                        pendingStopCallbackContext = callbackContext;
+                    }
                     facade.stop();
-                    callbackContext.success();
+                    if (!wasRunning) {
+                        callbackContext.success();
+                        return;
+                    }
+                }
+            });
+
+            return true;
+        } else if (ACTION_STOP_FOR_GEOFENCE.equals(action)) {
+            runOnWebViewThread(new Runnable() {
+                public void run() {
+                    boolean shouldWaitForStopAck = facade.isRunning();
+                    if (shouldWaitForStopAck) {
+                        pendingStopCallbackContext = callbackContext;
+                    }
+                    boolean stopRequested = facade.stopForGeofence();
+                    if (!stopRequested || !shouldWaitForStopAck) {
+                        if (pendingStopCallbackContext == callbackContext) {
+                            pendingStopCallbackContext = null;
+                        }
+                        callbackContext.success();
+                        return;
+                    }
                 }
             });
 
@@ -383,6 +412,16 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
         } else if (ACTION_FORCE_SYNC.equals(action)) {
             logger.debug("Forced location sync requested");
             facade.forceSync();
+            callbackContext.success();
+            return true;
+        } else if (ACTION_GET_GEOFENCE_COMPANION_STATUS.equals(action)) {
+            try {
+                callbackContext.success(facade.getGeofenceCompanionStatus());
+            } catch (PluginException e) {
+                callbackContext.sendPluginResult(ErrorPluginResult.from(e));
+            } catch (JSONException e) {
+                callbackContext.sendPluginResult(ErrorPluginResult.from("Getting geofence companion status failed", e, PluginException.JSON_ERROR));
+            }
             return true;
         }
 
@@ -601,6 +640,10 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
                 return;
             case BackgroundGeolocationFacade.SERVICE_STOPPED:
                 sendEvent(STOP_EVENT);
+                if (pendingStopCallbackContext != null) {
+                    pendingStopCallbackContext.success();
+                    pendingStopCallbackContext = null;
+                }
                 return;
         }
     }

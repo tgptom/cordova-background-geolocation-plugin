@@ -40,6 +40,7 @@ import com.marianhello.logging.LoggerManager;
 import com.marianhello.logging.UncaughtExceptionLogger;
 
 import org.json.JSONException;
+import org.json.JSONObject;
 import org.slf4j.event.Level;
 
 import java.util.Arrays;
@@ -414,6 +415,52 @@ public class BackgroundGeolocationFacade {
         }
         mLifecycleCoordinator.cancelPendingStart();
         stopBackgroundService(stopGeneration);
+    }
+
+    public boolean stopForGeofence() {
+        logger.debug("Stopping geofence-owned service");
+        unregisterLocationModeChangeReceiver();
+
+        TrackingOwnershipStore.ReconciledState state = mLifecycleCoordinator.reconcileState();
+        if (state.owner != TrackingOwnershipStore.OWNER_GEOFENCE
+                && state.pendingStartOwner != TrackingOwnershipStore.OWNER_GEOFENCE) {
+            logger.info("Ignoring stopForGeofence because geofence owner is not active");
+            return false;
+        }
+
+        if (state.pendingStartOwner == TrackingOwnershipStore.OWNER_GEOFENCE) {
+            mLifecycleCoordinator.cancelPendingStart();
+            notifyGeofenceStartError(new PluginException(
+                    "Geofence-owned start was cancelled by stopForGeofence request.",
+                    PluginException.START_FAILED_ERROR
+            ));
+        }
+
+        long stopGeneration = 0L;
+        if (state.owner == TrackingOwnershipStore.OWNER_GEOFENCE) {
+            stopGeneration = mLifecycleCoordinator.requestStop(
+                    TrackingOwnershipStore.OWNER_GEOFENCE,
+                    STOP_ACK_TIMEOUT_MS,
+                    null
+            );
+            stopBackgroundService(stopGeneration);
+            return true;
+        }
+        return true;
+    }
+
+    public JSONObject getGeofenceCompanionStatus() throws PluginException, JSONException {
+        TrackingOwnershipStore.ReconciledState state = mLifecycleCoordinator.reconcileState();
+        Config config = getStoredConfig();
+        JSONObject json = new JSONObject();
+        json.put("compatibilityNote", GeofenceTransitionHandler.COMPATIBILITY_NOTE);
+        json.put("trackingOwner", state.owner);
+        json.put("pendingStartOwner", state.pendingStartOwner);
+        json.put("pendingStopOwner", state.pendingStopOwner);
+        json.put("serviceStarted", state.serviceStarted);
+        json.put("hasValidUrl", config != null && config.hasValidUrl());
+        json.put("startForegroundEnabled", config != null && Boolean.TRUE.equals(config.getStartForeground()));
+        return json;
     }
 
     public void pause() {

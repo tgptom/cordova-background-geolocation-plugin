@@ -40,7 +40,7 @@
     
     [urlSession getTasksWithCompletionHandler:^(NSArray *dataTasks, NSArray *uploadTasks, NSArray *downloadTasks) {
         for(NSURLSessionUploadTask *task in uploadTasks) {
-            DDLogInfo(@"Restored upload task %zu for %@", (unsigned long)task.taskIdentifier, task.originalRequest.URL);
+            DDLogInfo(@"Restored upload task %zu", (unsigned long)task.taskIdentifier);
             @synchronized (tasks) {
                 [tasks addObject:task];
             }
@@ -100,7 +100,7 @@
     @synchronized (tasks) {
         [tasks addObject:task];
     }
-    DDLogInfo(@"Started upload for %@ as task %zu/%@/%@", jsonUrl.lastPathComponent, (unsigned long)task.taskIdentifier, task.taskDescription, task);
+    DDLogInfo(@"Started upload task %zu for %@", (unsigned long)task.taskIdentifier, jsonUrl.lastPathComponent);
     [task resume];
     
 }
@@ -150,7 +150,7 @@ NSString *stringFromFileSize(unsigned long long theSize)
 {
     NSInteger statusCode = [(NSHTTPURLResponse *)task.response statusCode];
     
-    DDLogInfo(@"Finished uploading task %zu %@: %@ %@, HTTP %ld", (unsigned long)[task taskIdentifier], task.originalRequest.URL, error ?: @"Success", task.response, (long)statusCode);
+    DDLogInfo(@"Finished uploading task %zu: %@, HTTP %ld", (unsigned long)[task taskIdentifier], error ?: @"Success", (long)statusCode);
     
     @synchronized (tasks) {
         [tasks removeObject:task];
@@ -184,7 +184,7 @@ NSString *stringFromFileSize(unsigned long long theSize)
 
 - (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)dataTask didReceiveData:(NSData *)data
 {
-    DDLogInfo(@"Response:: %@", [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]);
+    DDLogInfo(@"Background sync response received (%lu bytes)", (unsigned long)[data length]);
 }
 
 - (void)URLSession:(NSURLSession *)session didBecomeInvalidWithError:(nullable NSError *)error

@@ -23,6 +23,7 @@
         <service
             android:name="com.marianhello.bgloc.sync.SyncService"
             android:exported="true"
+            android:permission="android.permission.BIND_SYNC_ADAPTER"
             android:process=":sync">
             <intent-filter>
                 <action android:name="android.content.SyncAdapter"/>
@@ -31,7 +32,9 @@
                 android:resource="@xml/syncadapter"/>
         </service>
         <service
-            android:name="com.marianhello.bgloc.sync.AuthenticatorService">
+            android:name="com.marianhello.bgloc.sync.AuthenticatorService"
+            android:exported="false"
+            android:permission="android.permission.BIND_ACCOUNT_AUTHENTICATOR">
             <intent-filter>
                 <action android:name="android.accounts.AccountAuthenticator"/>
             </intent-filter>
@@ -50,7 +53,7 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
-        <uses-library android:name="org.apache.http.legacy" android:required="true" />
+        <uses-library android:name="org.apache.http.legacy" android:required="false" />
     </application>
 
     <uses-permission android:name="android.hardware.location" />

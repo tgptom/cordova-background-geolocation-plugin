@@ -48,6 +48,7 @@ public class ConfigMapperTest {
         Assert.assertEquals(config.getUrl(), jConfig.getString("url"));
         Assert.assertEquals(config.getSyncUrl(), jConfig.getString("syncUrl"));
         Assert.assertEquals(config.getSyncThreshold().intValue(), jConfig.getInt("syncThreshold"));
+        Assert.assertEquals(config.getAllowHttp().booleanValue(), jConfig.getBoolean("allowHttp"));
         Assert.assertEquals(new JSONObject(config.getHttpHeaders()).toString(), jConfig.getJSONObject("httpHeaders").toString());
         Assert.assertEquals(config.getMaxLocations().intValue(), jConfig.getInt("maxLocations"));
         Assert.assertEquals(LocationTemplateFactory.getDefault().toString(), jConfig.get("postTemplate").toString());
@@ -63,6 +64,7 @@ public class ConfigMapperTest {
         json.put("notificationText", JSONObject.NULL);
         json.put("notificationIconLarge", JSONObject.NULL);
         json.put("notificationIconSmall", JSONObject.NULL);
+        json.put("allowHttp", true);
 
         Config config = ConfigMapper.fromJSONObject(json);
 
@@ -88,6 +90,7 @@ public class ConfigMapperTest {
 
         Assert.assertEquals(Config.NullString, config.getSmallNotificationIcon());
         Assert.assertFalse(config.hasSmallNotificationIcon());
+        Assert.assertTrue(config.getAllowHttp());
     }
 
     @Test

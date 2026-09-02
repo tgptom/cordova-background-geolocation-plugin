@@ -630,6 +630,7 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
         json.put("hasPermissions", facade.hasPermissions()); //@Deprecated
         json.put("locationServicesEnabled", facade.locationServicesEnabled());
         json.put("authorization", facade.getAuthorizationStatus());
+        json.put("notificationPermissionGranted", facade.hasNotificationPermission());
 
         return json;
     }

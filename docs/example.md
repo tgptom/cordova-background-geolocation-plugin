@@ -19,7 +19,9 @@ function onDeviceReady() {
     interval: 10000,
     fastestInterval: 5000,
     activitiesInterval: 10000,
-    url: 'http://192.168.81.15:3000/location',
+    url: 'https://example.com/location',
+    // Cleartext HTTP is blocked by default. Use allowHttp only for local/dev endpoints.
+    allowHttp: false,
     httpHeaders: {
       'X-FOO': 'bar'
     },

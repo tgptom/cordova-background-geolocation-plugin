@@ -82,7 +82,9 @@ BackgroundGeolocation.configure({
     interval: 10000,
     fastestInterval: 5000,
     activitiesInterval: 10000,
-    url: 'http://192.168.81.15:3000/location',
+    url: 'https://example.com/location',
+    // Cleartext HTTP is blocked by default. Use allowHttp only for local/dev endpoints.
+    allowHttp: false,
     httpHeaders: {
       'X-FOO': 'bar'
     },
@@ -98,6 +100,8 @@ BackgroundGeolocation.configure({
 Then call `start()` to start location tracking.
 
 A more comprehensive example can be found in the [Documentation](https://haylltd.github.io/cordova-background-geolocation-plugin/example)
+
+Transport policy: upload endpoints use HTTPS by default. Cleartext HTTP requires explicit `allowHttp: true` and should only be used in controlled development environments.
 
 ### Companion geofence integration (`startForGeofence`)
 
@@ -115,6 +119,7 @@ This plugin does **not** register geofences. Keep using a geofence plugin to cre
 #### Migration and store-safety notes
 - iOS: set meaningful app-specific `ALWAYS_USAGE_DESCRIPTION` / location purpose strings.
 - Android: ensure foreground-service declarations and user-visible location notification are correctly configured.
+- Android: legacy SyncAdapter/account upload components are hardened in this release and have a staged WorkManager migration plan (`docs/android-sync-architecture.md`).
 - Android: physical-device validation is still required for modern background-start and foreground-service policy behavior.
 - App UX/policy: provide explicit user controls and disclosures for background tracking, and document how geofence transitions start/stop precise tracking.
 - Optional: call `getGeofenceCompanionStatus()` to inspect integration compatibility and ownership state in-app.

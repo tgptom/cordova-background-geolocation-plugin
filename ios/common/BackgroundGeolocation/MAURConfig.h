@@ -29,6 +29,7 @@ enum {
 @property NSString *url;
 @property NSString *syncUrl;
 @property NSNumber *syncThreshold;
+@property NSNumber *allowHttp;
 @property NSMutableDictionary* httpHeaders;
 @property NSNumber *_saveBatteryOnBackground;
 @property NSNumber *maxLocations;
@@ -49,8 +50,10 @@ enum {
 - (BOOL) hasStopOnTerminate;
 - (BOOL) hasUrl;
 - (BOOL) hasValidUrl;
+- (BOOL) hasAllowedUrl;
 - (BOOL) hasSyncUrl;
 - (BOOL) hasValidSyncUrl;
+- (BOOL) hasAllowedSyncUrl;
 - (BOOL) hasSyncThreshold;
 - (BOOL) hasHttpHeaders;
 - (BOOL) hasSaveBatteryOnBackground;

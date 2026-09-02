@@ -30,7 +30,7 @@ BackgroundGeolocation.headlessTask(function(event) {
     if (event.name === 'location' ||
       event.name === 'stationary') {
         var xhr = new XMLHttpRequest();
-        xhr.open('POST', 'http://192.168.81.14:3000/headless');
+        xhr.open('POST', 'https://example.com/headless');
         xhr.setRequestHeader('Content-Type', 'application/json');
         xhr.send(JSON.stringify(event.params));
     }

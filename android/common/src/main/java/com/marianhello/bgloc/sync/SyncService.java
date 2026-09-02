@@ -42,6 +42,9 @@ public class SyncService extends Service {
      */
     @Override
     public IBinder onBind(Intent intent) {
+        if (intent == null || !"android.content.SyncAdapter".equals(intent.getAction())) {
+            return null;
+        }
         /*
          * Get the object that allows external processes
          * to call onPerformSync(). The object is created

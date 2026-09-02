@@ -146,13 +146,11 @@ static NSString * const TAG = @"CDVBackgroundGeolocation";
     [self.commandDelegate runInBackground:^{
         NSError *error = nil;
         BOOL stopped = [facade stopForOwner:MAURTrackingOwnerGeofence error:&error];
-        if (!stopped && error == nil) {
-            error = [self defaultStartErrorWithCode:MAURBGStartFailed
-                                            message:@"Unable to stop geofence-owned background geolocation."];
-        }
         CDVPluginResult* result;
-        if (stopped) {
-            [self sendEvent:@"stop"];
+        if (error == nil) {
+            if (stopped) {
+                [self sendEvent:@"stop"];
+            }
             result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
         } else {
             result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsDictionary:[self errorToDictionary:error]];
@@ -392,7 +390,7 @@ static NSString * const TAG = @"CDVBackgroundGeolocation";
         dict[@"compatibilityNote"] = @"Companion contract: tgptom/cordova-plugin-geofence PR #11 or successor (hardened geofence transition contract)";
         dict[@"trackingOwner"] = @([facade trackingOwner]);
         dict[@"serviceStarted"] = @([facade isStarted]);
-        dict[@"hasValidUrl"] = @([cfg hasValidUrl]);
+        dict[@"hasValidUrl"] = @([cfg hasAllowedUrl]);
         dict[@"startForegroundEnabled"] = @(![cfg stopOnTerminate]);
         CDVPluginResult *result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:dict];
         [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];

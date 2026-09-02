@@ -40,6 +40,7 @@
     XCTAssertFalse([config hasUrl]);
     XCTAssertFalse([config hasSyncUrl]);
     XCTAssertFalse([config hasSyncThreshold]);
+    XCTAssertNil(config.allowHttp);
     XCTAssertFalse([config hasHttpHeaders]);
     XCTAssertFalse([config hasSaveBatteryOnBackground]);
     XCTAssertFalse([config hasMaxLocations]);
@@ -53,6 +54,7 @@
 
     XCTAssertNil(dict[@"url"]);
     XCTAssertNil(dict[@"syncUrl"]);
+    XCTAssertNil(dict[@"allowHttp"]);
     XCTAssertNil(dict[@"httpHeaders"]);
     XCTAssertEqualObjects(dict[@"postTemplate"], [MAURConfig getDefaultTemplate]);
 }
@@ -72,12 +74,14 @@
     MAURConfig *config = [[MAURConfig alloc] init];
     config.url = (id)[NSNull null];
     config.syncUrl = (id)[NSNull null];
+    config.allowHttp = @NO;
     config.httpHeaders = (id)[NSNull null];
     config._template = (id)[NSNull null];
     
     NSDictionary *dict = [config toDictionary];
     XCTAssertEqualObjects(dict[@"url"], @"");
     XCTAssertEqualObjects(dict[@"syncUrl"], @"");
+    XCTAssertEqualObjects(dict[@"allowHttp"], @NO);
     XCTAssertEqualObjects(dict[@"httpHeaders"], @{});
     XCTAssertEqualObjects(dict[@"postTemplate"], [MAURConfig getDefaultTemplate]);
 }
@@ -197,6 +201,19 @@
                                                                                      hasValidUrl:YES
                                                                                  stopOnTerminate:NO];
     XCTAssertEqual(valid, MAURGeofenceTransitionActionStart);
+}
+
+- (void)testHttpsRequiredByDefaultUnlessAllowHttpEnabled {
+    MAURConfig *config = [[MAURConfig alloc] initWithDefaults];
+    config.url = @"http://example.com/location";
+    config.syncUrl = @"http://example.com/sync";
+
+    XCTAssertFalse([config hasAllowedUrl]);
+    XCTAssertFalse([config hasAllowedSyncUrl]);
+
+    config.allowHttp = @YES;
+    XCTAssertTrue([config hasAllowedUrl]);
+    XCTAssertTrue([config hasAllowedSyncUrl]);
 }
 
 @end

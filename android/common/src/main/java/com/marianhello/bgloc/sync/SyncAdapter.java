@@ -96,7 +96,10 @@ public class SyncAdapter extends AbstractThreadedSyncAdapter implements HttpPost
             logger.error("Error retrieving config: {}", e.getMessage());
         }
 
-        if (config == null || !config.hasValidSyncUrl()) {
+        if (config == null || !config.hasAllowedSyncUrl()) {
+            if (config != null && config.hasValidSyncUrl()) {
+                logger.warn("Skipping sync because syncUrl is not HTTPS. Set allowHttp=true only for controlled development environments.");
+            }
             return;
         }
 

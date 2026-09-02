@@ -84,6 +84,9 @@ public class ConfigMapper {
         if (jObject.has("syncThreshold")) {
             config.setSyncThreshold(jObject.getInt("syncThreshold"));
         }
+        if (jObject.has("allowHttp")) {
+            config.setAllowHttp(jObject.getBoolean("allowHttp"));
+        }
         if (jObject.has("httpHeaders")) {
             config.setHttpHeaders(jObject.getJSONObject("httpHeaders"));
         }
@@ -125,6 +128,7 @@ public class ConfigMapper {
         json.put("url", config.getUrl() != Config.NullString ? config.getUrl() : JSONObject.NULL);
         json.put("syncUrl", config.getSyncUrl() != Config.NullString  ? config.getSyncUrl() : JSONObject.NULL);
         json.put("syncThreshold", config.getSyncThreshold());
+        json.put("allowHttp", config.getAllowHttp());
         json.put("httpHeaders", new JSONObject(config.getHttpHeaders()));
         json.put("maxLocations", config.getMaxLocations());
         LocationTemplate tpl = config.getTemplate();

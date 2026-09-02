@@ -35,6 +35,13 @@
       }
     }
   },
+  "scripts": {
+    "lint": "cd android && ./gradlew :common:lint :CDVBackgroundGeolocation:lint --no-daemon",
+    "test:android": "cd android && ./gradlew :common:test :CDVBackgroundGeolocation:test :common:assembleDebug :CDVBackgroundGeolocation:assembleDebug --no-daemon",
+    "test:ios": "xcodebuild test -project ios/common/BackgroundGeolocation.xcodeproj -target BackgroundGeolocationTests -destination 'platform=iOS Simulator,name=iPhone 15'",
+    "pack:check": "npm pack --dry-run",
+    "test": "npm run lint && npm run test:android && npm run test:ios && npm run pack:check"
+  },
   "author": "",
   "license": "Apache-2.0",
   "bugs": {

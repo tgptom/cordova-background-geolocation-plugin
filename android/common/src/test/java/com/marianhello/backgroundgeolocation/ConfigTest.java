@@ -45,6 +45,7 @@ public class ConfigTest {
         Assert.assertFalse(config.hasUrl());
         Assert.assertFalse(config.hasSyncUrl());
         Assert.assertFalse(config.hasSyncThreshold());
+        Assert.assertFalse(config.hasAllowHttp());
         Assert.assertFalse(config.hasHttpHeaders());
         Assert.assertFalse(config.hasMaxLocations());
         Assert.assertFalse(config.hasTemplate());
@@ -74,6 +75,7 @@ public class ConfigTest {
         Assert.assertEquals(config.getUrl(), "");
         Assert.assertEquals(config.getSyncUrl(), "");
         Assert.assertEquals(config.getSyncThreshold().intValue(), 100);
+        Assert.assertFalse(config.getAllowHttp());
         Assert.assertTrue(config.getHttpHeaders().isEmpty());
         Assert.assertEquals(config.getTemplate(), LocationTemplateFactory.getDefault());
         Assert.assertEquals(config.getMaxLocations().intValue(), 10000);
@@ -187,5 +189,19 @@ public class ConfigTest {
 
         Assert.assertEquals(Config.getDefault().getUrl(), Config.merge(config1, config2).getUrl());
         Assert.assertEquals(Config.getDefault().getSyncUrl(), Config.merge(config1, config2).getSyncUrl());
+    }
+
+    @Test
+    public void testHttpsRequiredByDefaultUnlessAllowHttpEnabled() {
+        Config config = Config.getDefault();
+        config.setUrl("http://example.com/location");
+        config.setSyncUrl("http://example.com/sync");
+
+        Assert.assertFalse(config.hasAllowedUrl());
+        Assert.assertFalse(config.hasAllowedSyncUrl());
+
+        config.setAllowHttp(true);
+        Assert.assertTrue(config.hasAllowedUrl());
+        Assert.assertTrue(config.hasAllowedSyncUrl());
     }
 }

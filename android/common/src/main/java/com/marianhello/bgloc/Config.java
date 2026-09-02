@@ -9,6 +9,7 @@ This is a new class
 
 package com.marianhello.bgloc;
 
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -24,6 +25,9 @@ import org.json.JSONObject;
 
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Config class
@@ -61,6 +65,7 @@ public class Config implements Parcelable
     private String syncUrl;
     private Integer syncThreshold;
     private HashMap httpHeaders;
+    private Boolean allowHttp;
     private Integer maxLocations;
     private LocationTemplate template;
 
@@ -91,6 +96,7 @@ public class Config implements Parcelable
         this.syncUrl = config.syncUrl;
         this.syncThreshold = config.syncThreshold;
         this.httpHeaders = CloneHelper.deepCopy(config.httpHeaders);
+        this.allowHttp = config.allowHttp;
         this.maxLocations = config.maxLocations;
         if (config.template instanceof AbstractLocationTemplate) {
             this.template = ((AbstractLocationTemplate)config.template).clone();
@@ -119,6 +125,7 @@ public class Config implements Parcelable
         setUrl(in.readString());
         setSyncUrl(in.readString());
         setSyncThreshold(in.readInt());
+        setAllowHttp((Boolean) in.readValue(null));
         setMaxLocations(in.readInt());
         Bundle bundle = in.readBundle();
         setHttpHeaders((HashMap<String, String>) bundle.getSerializable("httpHeaders"));
@@ -149,6 +156,7 @@ public class Config implements Parcelable
         config.syncUrl = "";
         config.syncThreshold = 100;
         config.httpHeaders = null;
+        config.allowHttp = false;
         config.maxLocations = 10000;
         config.template = null;
 
@@ -182,6 +190,7 @@ public class Config implements Parcelable
         out.writeString(getUrl());
         out.writeString(getSyncUrl());
         out.writeInt(getSyncThreshold());
+        out.writeValue(getAllowHttp());
         out.writeInt(getMaxLocations());
         Bundle bundle = new Bundle();
         bundle.putSerializable("httpHeaders", getHttpHeaders());
@@ -427,6 +436,9 @@ public class Config implements Parcelable
     public boolean hasValidUrl() {
         return url != null && !url.isEmpty();
     }
+    public boolean hasAllowedUrl() {
+        return hasValidUrl() && isUrlSchemeAllowed(url);
+    }
 
     public String getUrl() {
         return url;
@@ -441,6 +453,9 @@ public class Config implements Parcelable
     }
     public boolean hasValidSyncUrl() {
         return syncUrl != null && !syncUrl.isEmpty();
+    }
+    public boolean hasAllowedSyncUrl() {
+        return hasValidSyncUrl() && isUrlSchemeAllowed(syncUrl);
     }
 
     public String getSyncUrl() {
@@ -461,6 +476,18 @@ public class Config implements Parcelable
 
     public void setSyncThreshold(Integer syncThreshold) {
         this.syncThreshold = syncThreshold;
+    }
+
+    public boolean hasAllowHttp() {
+        return allowHttp != null;
+    }
+
+    public Boolean getAllowHttp() {
+        return allowHttp != null ? allowHttp : Boolean.FALSE;
+    }
+
+    public void setAllowHttp(Boolean allowHttp) {
+        this.allowHttp = allowHttp;
     }
 
     public boolean hasHttpHeaders() {
@@ -541,14 +568,54 @@ public class Config implements Parcelable
                 .append(" nIconLarge=").append(getLargeNotificationIcon())
                 .append(" nIconSmall=").append(getSmallNotificationIcon())
                 .append(" nIconColor=").append(getNotificationIconColor())
-                .append(" url=").append(getUrl())
-                .append(" syncUrl=").append(getSyncUrl())
+                .append(" url=").append(redactUrl(getUrl()))
+                .append(" syncUrl=").append(redactUrl(getSyncUrl()))
                 .append(" syncThreshold=").append(getSyncThreshold())
-                .append(" httpHeaders=").append(getHttpHeaders().toString())
+                .append(" allowHttp=").append(getAllowHttp())
+                .append(" httpHeaders=").append(redactHeaders(getHttpHeaders()))
                 .append(" maxLocations=").append(getMaxLocations())
                 .append(" postTemplate=").append(hasTemplate() ? getTemplate().toString() : null)
                 .append("]")
                 .toString();
+    }
+
+    private boolean isUrlSchemeAllowed(String candidateUrl) {
+        Uri parsed = Uri.parse(candidateUrl);
+        String scheme = parsed != null ? parsed.getScheme() : null;
+        if (scheme == null) {
+            return false;
+        }
+        String normalizedScheme = scheme.toLowerCase(Locale.US);
+        if ("https".equals(normalizedScheme)) {
+            return true;
+        }
+        if ("http".equals(normalizedScheme)) {
+            return Boolean.TRUE.equals(getAllowHttp());
+        }
+        return true;
+    }
+
+    private String redactUrl(String rawUrl) {
+        if (rawUrl == null || rawUrl.isEmpty()) {
+            return rawUrl;
+        }
+        Uri parsed = Uri.parse(rawUrl);
+        if (parsed == null || parsed.getHost() == null) {
+            return "***REDACTED***";
+        }
+        return parsed.getScheme() + "://" + parsed.getHost() + "/***";
+    }
+
+    private Map<String, String> redactHeaders(Map<String, String> headers) {
+        HashMap<String, String> redacted = new HashMap<>();
+        if (headers == null) {
+            return redacted;
+        }
+        Set<String> keys = headers.keySet();
+        for (String key : keys) {
+            redacted.put(key, "***REDACTED***");
+        }
+        return redacted;
     }
 
     public Parcel toParcel () {
@@ -629,6 +696,9 @@ public class Config implements Parcelable
         }
         if (config2.hasSyncThreshold()) {
             merger.setSyncThreshold(config2.getSyncThreshold());
+        }
+        if (config2.hasAllowHttp()) {
+            merger.setAllowHttp(config2.getAllowHttp());
         }
         if (config2.hasHttpHeaders()) {
             merger.setHttpHeaders(config2.getHttpHeaders());

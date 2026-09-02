@@ -23,6 +23,9 @@ public class AuthenticatorService extends Service {
      */
     @Override
     public IBinder onBind(Intent intent) {
+        if (intent == null || !"android.accounts.AccountAuthenticator".equals(intent.getAction())) {
+            return null;
+        }
         return mAuthenticator.getIBinder();
     }
 }

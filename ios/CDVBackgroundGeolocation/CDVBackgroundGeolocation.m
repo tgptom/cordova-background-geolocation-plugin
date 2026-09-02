@@ -152,6 +152,7 @@ static NSString * const TAG = @"CDVBackgroundGeolocation";
         }
         CDVPluginResult* result;
         if (stopped) {
+            [self sendEvent:@"stop"];
             result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
         } else {
             result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsDictionary:[self errorToDictionary:error]];

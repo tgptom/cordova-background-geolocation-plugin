@@ -543,6 +543,7 @@ export interface BackgroundGeolocationPlugin {
    * Stop tracking owned by geofence integration.
    * Resolves when geofence tracking is already stopped.
    * Rejects with ownership-conflict error (`code: 1005`) when manual tracking owns the running service.
+   * Emits the `stop` lifecycle event on success.
    *
    * Platform: iOS, Android
    */

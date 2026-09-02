@@ -133,10 +133,29 @@ static MAURLocationTransform s_locationTransform = nil;
     }
     [request setHTTPBody:[jsonStr dataUsingEncoding:NSUTF8StringEncoding]];
     
-    // Create url connection and fire request
-    NSHTTPURLResponse* urlResponse = nil;
-    [NSURLConnection sendSynchronousRequest:request returningResponse:&urlResponse error:outError];
-    
+    __block NSHTTPURLResponse* urlResponse = nil;
+    __block NSError *requestError = nil;
+    dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+    NSURLSession *session = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration ephemeralSessionConfiguration]];
+    NSURLSessionDataTask *task = [session dataTaskWithRequest:request
+                                            completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
+            urlResponse = (NSHTTPURLResponse *) response;
+        }
+        requestError = error;
+        dispatch_semaphore_signal(semaphore);
+    }];
+    [task resume];
+    dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+    [session finishTasksAndInvalidate];
+
+    if (requestError != nil) {
+        if (outError != nil) {
+            *outError = requestError;
+        }
+        return NO;
+    }
+
     NSInteger statusCode = urlResponse.statusCode;
     
     if (statusCode == 285)
@@ -169,7 +188,7 @@ static MAURLocationTransform s_locationTransform = nil;
         return YES;
     }
     
-    if (*outError == nil) {
+    if (outError == nil || *outError == nil) {
         DDLogDebug(@"%@ Server error while posting locations responseCode: %ld", TAG, (long)statusCode);
     } else {
         DDLogError(@"%@ Error while posting locations %@", TAG, [*outError localizedDescription]);

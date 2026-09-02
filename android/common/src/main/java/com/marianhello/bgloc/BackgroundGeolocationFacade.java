@@ -44,7 +44,9 @@ import org.json.JSONObject;
 import org.slf4j.event.Level;
 
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.TimeoutException;
 
 public class BackgroundGeolocationFacade {
@@ -95,7 +97,7 @@ public class BackgroundGeolocationFacade {
         UncaughtExceptionLogger.register(context.getApplicationContext());
 
         logger = LoggerManager.getLogger(BackgroundGeolocationFacade.class);
-        LoggerManager.enableDBLogging();
+        updateDbLogging(getConfig());
 
         logger.info("Initializing plugin");
 
@@ -384,7 +386,13 @@ public class BackgroundGeolocationFacade {
 
     protected void requestLocationPermissions(PermissionManager.PermissionRequestListener listener) {
         PermissionManager permissionManager = PermissionManager.getInstance(getContext());
-        permissionManager.checkPermissions(Arrays.asList(PERMISSIONS), listener);
+        List<String> permissions = new ArrayList<>(Arrays.asList(PERMISSIONS));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                && ContextCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            permissions.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION);
+        }
+        permissionManager.checkPermissions(permissions, listener);
     }
 
     protected void requestPostNotificationPermission() {
@@ -594,6 +602,7 @@ public class BackgroundGeolocationFacade {
             persistConfiguration(newConfig);
             logger.debug("Service configured with: {}", newConfig.toString());
             mConfig = newConfig;
+            updateDbLogging(newConfig);
             mService.configure(newConfig);
         } catch (Exception e) {
             logger.error("Configuration error: {}", e.getMessage());
@@ -613,6 +622,7 @@ public class BackgroundGeolocationFacade {
             mConfig = Config.getDefault();
         }
 
+        updateDbLogging(mConfig);
         return mConfig;
     }
 
@@ -830,6 +840,14 @@ public class BackgroundGeolocationFacade {
 
     private Context getApplicationContext() {
         return mContext.getApplicationContext();
+    }
+
+    private synchronized void updateDbLogging(Config config) {
+        if (config != null && config.isDebugging()) {
+            LoggerManager.enableDBLogging();
+        } else {
+            LoggerManager.disableDBLogging();
+        }
     }
 
     public static void showAppSettings(Context context) {

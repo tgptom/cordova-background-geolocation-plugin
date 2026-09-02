@@ -112,6 +112,7 @@ Platform: iOS, Android
 Stop tracking only when geofence ownership is active.
 Stopping when geofence-owned tracking is already stopped succeeds as an idempotent no-op.
 When manual tracking owns the running service this method fails with ownership conflict (`code: 1005`) and does not stop manual tracking.
+On success, the plugin emits the `stop` lifecycle event.
 
 ## getCurrentLocation(success, fail, options)
 

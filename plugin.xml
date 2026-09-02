@@ -26,7 +26,9 @@
 
     <!-- android -->
     <platform name="android">
-        <preference name="GOOGLE_PLAY_SERVICES_VERSION" default="17+"/>
+        <preference name="GOOGLE_PLAY_SERVICES_VERSION" default="21.3.0"/>
+        <preference name="ANDROIDX_CORE_VERSION" default="1.13.1"/>
+        <preference name="ANDROIDX_APPCOMPAT_VERSION" default="1.7.0"/>
         <preference name="ICON" default="@mipmap/ic_launcher" />
         <preference name="SMALL_ICON" default="@mipmap/ic_launcher" />
         <preference name="ACCOUNT_NAME" default="@string/app_name" />
@@ -35,8 +37,8 @@
         <preference name="CONTENT_AUTHORITY" default="$PACKAGE_NAME" />
 
         <framework src="com.google.android.gms:play-services-location:$GOOGLE_PLAY_SERVICES_VERSION" />
-        <framework src="androidx.core:core:1.13.1" />
-        <framework src="androidx.appcompat:appcompat:1.7.0" />
+        <framework src="androidx.core:core:$ANDROIDX_CORE_VERSION" />
+        <framework src="androidx.appcompat:appcompat:$ANDROIDX_APPCOMPAT_VERSION" />
         <framework src="android/dependencies.gradle" custom="true" type="gradleReference"/>
         <!-- Generated with gen_sources.sh @ 2019-09-24 08:28:46 -->
         <source-file src="android/CDVBackgroundGeolocation/src/main/java/com/evgenii/jsevaluator/HandlerWrapper.java" target-dir="src/com/evgenii/jsevaluator" />
@@ -173,7 +175,7 @@
             <receiver
                   android:name="com.marianhello.bgloc.BootCompletedReceiver"
                   android:enabled="true"
-                  android:exported="true">
+                 android:exported="false">
                <intent-filter>
                   <action android:name="android.intent.action.BOOT_COMPLETED" />
                </intent-filter>
@@ -190,6 +192,7 @@
             <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
             <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
             <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+            <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
             <uses-permission android:name="android.permission.ACCESS_LOCATION_EXTRA_COMMANDS" />
             <uses-permission android:name="android.permission.INTERNET" />
             <uses-permission android:name="android.permission.WAKE_LOCK" />

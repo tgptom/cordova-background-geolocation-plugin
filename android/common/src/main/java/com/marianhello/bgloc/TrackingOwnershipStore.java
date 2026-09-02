@@ -245,6 +245,10 @@ final class TrackingOwnershipStore {
         return prefs.getLong(PENDING_STOP_GENERATION_KEY, 0L);
     }
 
+    long getPendingStopDeadline() {
+        return prefs.getLong(PENDING_STOP_DEADLINE_KEY, 0L);
+    }
+
     boolean isPendingStopGeneration(long generation) {
         return generation != 0L
                 && getPendingStopOwner() != OWNER_NONE

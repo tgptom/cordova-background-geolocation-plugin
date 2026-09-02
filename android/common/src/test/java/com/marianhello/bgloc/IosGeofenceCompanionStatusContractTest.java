@@ -58,6 +58,7 @@ public class IosGeofenceCompanionStatusContractTest {
         Assert.assertTrue(facadeContent.contains("return YES;"));
 
         Assert.assertTrue(pluginContent.contains("BOOL stopped = [facade stopForOwner:MAURTrackingOwnerGeofence error:&error];"));
+        Assert.assertTrue(pluginContent.contains("[self sendEvent:@\"stop\"];"));
         Assert.assertTrue(typings.contains("ownership-conflict error (`code: 1005`)"));
         Assert.assertTrue(apiDoc.contains("ownership conflict (`code: 1005`)"));
     }

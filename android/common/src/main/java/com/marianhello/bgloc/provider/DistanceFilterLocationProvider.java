@@ -370,7 +370,14 @@ public class DistanceFilterLocationProvider extends AbstractLocationProvider imp
 
     public void resetStationaryAlarm() {
         alarmManager.cancel(stationaryAlarmPI);
-        alarmManager.set(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + STATIONARY_TIMEOUT, stationaryAlarmPI); // Millisec * Second * Minute
+        long triggerAtMillis = System.currentTimeMillis() + STATIONARY_TIMEOUT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, stationaryAlarmPI);
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAtMillis, stationaryAlarmPI);
+        } else {
+            alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, stationaryAlarmPI);
+        }
     }
 
     private Integer calculateDistanceFilter(Float speed) {

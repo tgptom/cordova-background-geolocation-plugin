@@ -205,22 +205,19 @@ public class TrackingLifecycleCoordinatorTest {
     }
 
     @Test
-    public void stopTimeoutWithStillRunningServiceUsesDeterministicRetryThenFailure() {
+    public void stopTimeoutWithStillRunningServicePreservesOriginalDeadline() {
         long staleGeneration = coordinator.requestStart(TrackingOwnershipStore.OWNER_GEOFENCE, 50L, null);
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS);
-        long newerGeneration = coordinator.requestStart(TrackingOwnershipStore.OWNER_GEOFENCE, 15000L, null);
+        coordinator.requestStart(TrackingOwnershipStore.OWNER_GEOFENCE, 15000L, null);
         coordinator.handleServiceLifecycleAction(LocationServiceImpl.MSG_ON_SERVICE_STARTED, staleGeneration);
 
         serviceProxy.started = true;
         serviceProxy.failStop = true;
 
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(16, TimeUnit.SECONDS);
-        Assert.assertEquals(TrackingOwnershipStore.OWNER_GEOFENCE, coordinator.getPendingStartOwner());
-        Assert.assertEquals(newerGeneration, coordinator.getPendingStartGeneration());
-
-        Shadows.shadowOf(Looper.getMainLooper()).idleFor(16, TimeUnit.SECONDS);
         Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, coordinator.getPendingStartOwner());
         Assert.assertEquals(TrackingOwnershipStore.OWNER_GEOFENCE, coordinator.getOwner());
+        Assert.assertEquals(TrackingOwnershipStore.OWNER_NONE, coordinator.getPendingStopOwner());
     }
 
     @Test

@@ -7,6 +7,9 @@ import com.marianhello.logging.LoggerManager;
 import org.json.JSONArray;
 import org.json.JSONException;
 
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
@@ -28,6 +31,14 @@ import java.util.concurrent.TimeUnit;
  *
  */
 public class PostLocationTask {
+    private static final String[] SENSITIVE_HEADER_KEYWORDS = new String[] {
+            "authorization",
+            "token",
+            "secret",
+            "password",
+            "key",
+            "cookie"
+    };
     private final LocationDAO mLocationDAO;
     private final PostLocationTaskListener mTaskListener;
     private final ConnectivityListener mConnectivityListener;
@@ -148,7 +159,7 @@ public class PostLocationTask {
         }
 
         String url = mConfig.getUrl();
-        logger.debug("Posting json to url: {} headers: {}", url, mConfig.getHttpHeaders());
+        logger.debug("Posting json to url: {} headers: {}", url, redactHeaders(mConfig.getHttpHeaders()));
         int responseCode;
 
         try {
@@ -182,5 +193,35 @@ public class PostLocationTask {
         }
 
         return true;
+    }
+
+    private Map redactHeaders(Map headers) {
+        if (headers == null) {
+            return null;
+        }
+        HashMap<Object, Object> redacted = new HashMap<>();
+        for (Object keyObj : headers.keySet()) {
+            Object value = headers.get(keyObj);
+            if (!(keyObj instanceof String)) {
+                redacted.put(keyObj, value);
+                continue;
+            }
+            String key = (String) keyObj;
+            redacted.put(key, shouldRedactHeader(key) ? "***REDACTED***" : value);
+        }
+        return redacted;
+    }
+
+    private boolean shouldRedactHeader(String headerName) {
+        if (headerName == null) {
+            return false;
+        }
+        String normalized = headerName.toLowerCase(Locale.US);
+        for (String keyword : SENSITIVE_HEADER_KEYWORDS) {
+            if (normalized.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

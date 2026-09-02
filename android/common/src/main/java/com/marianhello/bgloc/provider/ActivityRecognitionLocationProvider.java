@@ -231,7 +231,7 @@ public class ActivityRecognitionLocationProvider extends AbstractLocationProvide
         DetectedActivity mostLikelyActivity = new DetectedActivity(0, DetectedActivity.UNKNOWN);
 
         for(DetectedActivity da: detectedActivities) {
-            if(da.getType() != DetectedActivity.TILTING || da.getType() != DetectedActivity.UNKNOWN) {
+            if(da.getType() != DetectedActivity.TILTING && da.getType() != DetectedActivity.UNKNOWN) {
                 Log.w(TAG, "Received a Detected Activity that was not tilting / unknown");
                 if (highestConfidence < da.getConfidence()) {
                     highestConfidence = da.getConfidence();

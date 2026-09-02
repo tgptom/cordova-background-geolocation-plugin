@@ -191,7 +191,18 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
                     if (wasRunning) {
                         addPendingStopCallback(callbackContext);
                     }
-                    facade.stop();
+                    try {
+                        facade.stop();
+                    } catch (RuntimeException e) {
+                        if (!wasRunning || removePendingStopCallback(callbackContext)) {
+                            callbackContext.sendPluginResult(ErrorPluginResult.from(
+                                    "Stopping background geolocation failed",
+                                    e,
+                                    PluginException.SERVICE_ERROR
+                            ));
+                        }
+                        return;
+                    }
                     if (!wasRunning) {
                         callbackContext.success();
                         return;
@@ -207,10 +218,28 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
                     if (shouldWaitForStopAck) {
                         addPendingStopCallback(callbackContext);
                     }
-                    boolean stopRequested = facade.stopForGeofence();
+                    boolean stopRequested;
+                    try {
+                        stopRequested = facade.stopForGeofence();
+                    } catch (PluginException e) {
+                        if (!shouldWaitForStopAck || removePendingStopCallback(callbackContext)) {
+                            callbackContext.sendPluginResult(ErrorPluginResult.from(e));
+                        }
+                        return;
+                    } catch (RuntimeException e) {
+                        if (!shouldWaitForStopAck || removePendingStopCallback(callbackContext)) {
+                            callbackContext.sendPluginResult(ErrorPluginResult.from(
+                                    "Stopping geofence-owned background geolocation failed",
+                                    e,
+                                    PluginException.SERVICE_ERROR
+                            ));
+                        }
+                        return;
+                    }
                     if (!stopRequested || !shouldWaitForStopAck) {
-                        removePendingStopCallback(callbackContext);
-                        callbackContext.success();
+                        if (!shouldWaitForStopAck || removePendingStopCallback(callbackContext)) {
+                            callbackContext.success();
+                        }
                         return;
                     }
                 }
@@ -476,8 +505,10 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
     @Override
     public void onDestroy() {
         logger.info("Destroying plugin");
-        resolvePendingStopCallbacksTimeout();
-        facade.destroy();
+        resolvePendingStopCallbacksDestroyed();
+        if (facade != null) {
+            facade.destroy();
+        }
         super.onDestroy();
     }
 
@@ -670,18 +701,22 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
         if (callbackContext == null) {
             return;
         }
+        boolean firstPendingCallback = pendingStopCallbackContexts.isEmpty();
         pendingStopCallbackContexts.add(callbackContext);
-        schedulePendingStopTimeoutLocked();
+        if (firstPendingCallback) {
+            schedulePendingStopTimeoutLocked();
+        }
     }
 
-    private synchronized void removePendingStopCallback(CallbackContext callbackContext) {
+    private synchronized boolean removePendingStopCallback(CallbackContext callbackContext) {
         if (callbackContext == null) {
-            return;
+            return false;
         }
-        pendingStopCallbackContexts.remove(callbackContext);
+        boolean removed = pendingStopCallbackContexts.remove(callbackContext);
         if (pendingStopCallbackContexts.isEmpty()) {
             clearPendingStopTimeoutLocked();
         }
+        return removed;
     }
 
     private void resolvePendingStopCallbacksSuccess() {
@@ -701,6 +736,16 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
         }
     }
 
+    private void resolvePendingStopCallbacksDestroyed() {
+        List<CallbackContext> callbacks = drainPendingStopCallbacks();
+        for (CallbackContext callback : callbacks) {
+            callback.sendPluginResult(ErrorPluginResult.from(
+                    "Plugin destroyed while waiting for stop acknowledgement",
+                    PluginException.SERVICE_ERROR
+            ));
+        }
+    }
+
     private synchronized List<CallbackContext> drainPendingStopCallbacks() {
         ArrayList<CallbackContext> callbacks = new ArrayList<>(pendingStopCallbackContexts);
         pendingStopCallbackContexts.clear();
@@ -709,7 +754,9 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
     }
 
     private synchronized void schedulePendingStopTimeoutLocked() {
-        clearPendingStopTimeoutLocked();
+        if (pendingStopTimeoutRunnable != null) {
+            return;
+        }
         pendingStopTimeoutRunnable = new Runnable() {
             @Override
             public void run() {

@@ -110,7 +110,8 @@ Stop background geolocation.
 Platform: iOS, Android
 
 Stop tracking only when geofence ownership is active.
-This is a safe no-op when manual tracking ownership is active.
+Stopping when geofence-owned tracking is already stopped succeeds as an idempotent no-op.
+When manual tracking owns the running service this method fails with ownership conflict (`code: 1005`) and does not stop manual tracking.
 
 ## getCurrentLocation(success, fail, options)
 
@@ -276,10 +277,12 @@ Returns companion geofence integration status:
 
 | Parameter                 | Type      | Description |
 |--------------------------|-----------|-------------|
+| `statusSchemaVersion`    | `Number`  | Companion status schema version (`2` adds pending-owner capability metadata) |
+| `pendingOwnersSupported` | `Boolean` | Whether `pendingStartOwner` / `pendingStopOwner` are live platform state |
 | `compatibilityNote`      | `String`  | Companion contract reference |
 | `trackingOwner`          | `Number`  | Current owner (`0` none, `1` manual, `2` geofence) |
-| `pendingStartOwner`      | `Number`  | Pending start owner (ownership-aware on Android, `0` on iOS) |
-| `pendingStopOwner`       | `Number`  | Pending stop owner (ownership-aware on Android, `0` on iOS) |
+| `pendingStartOwner`      | `Number?` | Pending start owner when `pendingOwnersSupported` is `true` (Android) |
+| `pendingStopOwner`       | `Number?` | Pending stop owner when `pendingOwnersSupported` is `true` (Android) |
 | `serviceStarted`         | `Boolean` | Service/plugin started state |
 | `hasValidUrl`            | `Boolean` | Persisted URL config is valid for companion start |
 | `startForegroundEnabled` | `Boolean` | Companion precondition flag (`startForeground` on Android, `!stopOnTerminate` equivalent on iOS) |

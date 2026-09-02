@@ -146,8 +146,12 @@ static NSString * const TAG = @"CDVBackgroundGeolocation";
     [self.commandDelegate runInBackground:^{
         NSError *error = nil;
         BOOL stopped = [facade stopForOwner:MAURTrackingOwnerGeofence error:&error];
+        if (!stopped && error == nil) {
+            error = [self defaultStartErrorWithCode:MAURBGStartFailed
+                                            message:@"Unable to stop geofence-owned background geolocation."];
+        }
         CDVPluginResult* result;
-        if (stopped && error == nil) {
+        if (stopped) {
             result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
         } else {
             result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsDictionary:[self errorToDictionary:error]];
@@ -382,10 +386,10 @@ static NSString * const TAG = @"CDVBackgroundGeolocation";
     [self.commandDelegate runInBackground:^{
         MAURConfig *cfg = [facade getConfig];
         NSMutableDictionary *dict = [NSMutableDictionary dictionaryWithCapacity:7];
+        dict[@"statusSchemaVersion"] = @([facade geofenceCompanionStatusSchemaVersion]);
+        dict[@"pendingOwnersSupported"] = @([facade supportsCompanionPendingOwners]);
         dict[@"compatibilityNote"] = @"Companion contract: tgptom/cordova-plugin-geofence PR #11 or successor (hardened geofence transition contract)";
         dict[@"trackingOwner"] = @([facade trackingOwner]);
-        dict[@"pendingStartOwner"] = @0;
-        dict[@"pendingStopOwner"] = @0;
         dict[@"serviceStarted"] = @([facade isStarted]);
         dict[@"hasValidUrl"] = @([cfg hasValidUrl]);
         dict[@"startForegroundEnabled"] = @(![cfg stopOnTerminate]);

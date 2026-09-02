@@ -530,6 +530,7 @@ final class TrackingLifecycleCoordinator {
 
     private void scheduleStopTimeout(final long generation, long timeoutMs, final TimeoutCallback callback) {
         clearStopTimeoutLocked();
+        final long requestedTimeoutMs = timeoutMs;
         pendingStopTimeout = new Runnable() {
             @Override
             public void run() {
@@ -570,7 +571,20 @@ final class TrackingLifecycleCoordinator {
                                 } catch (RuntimeException ignored) {
                                     // keep pending stop state; retry/failure path remains deterministic
                                 }
-                                scheduleStopTimeout(generation, timeoutMs, callback);
+                                long remainingTimeoutMs = resolveRemainingStopTimeoutMs(generation, requestedTimeoutMs);
+                                if (remainingTimeoutMs > 0L) {
+                                    scheduleStopTimeout(generation, remainingTimeoutMs, callback);
+                                } else {
+                                    int pendingStopOwner = store.getPendingStopOwner();
+                                    if (store.getOwner() == TrackingOwnershipStore.OWNER_NONE
+                                            && pendingStopOwner != TrackingOwnershipStore.OWNER_NONE) {
+                                        store.setOwner(pendingStopOwner);
+                                    }
+                                    failQueuedPendingStartLocked();
+                                    store.clearPendingStopOwnerIfGeneration(generation);
+                                    stopTimeoutRetries.remove(generation);
+                                    shouldNotify = true;
+                                }
                                 return;
                             }
                             int pendingStopOwner = store.getPendingStopOwner();
@@ -591,7 +605,17 @@ final class TrackingLifecycleCoordinator {
                 }
             }
         };
-        handler.postDelayed(pendingStopTimeout, timeoutMs <= 0L ? DEFAULT_ACK_TIMEOUT_MS : timeoutMs);
+        long effectiveTimeoutMs = resolveRemainingStopTimeoutMs(generation, timeoutMs);
+        long delayMs;
+        if (generation != 0L) {
+            delayMs = Math.max(0L, effectiveTimeoutMs);
+        } else {
+            delayMs = effectiveTimeoutMs <= 0L ? DEFAULT_ACK_TIMEOUT_MS : effectiveTimeoutMs;
+        }
+        handler.postDelayed(
+                pendingStopTimeout,
+                delayMs
+        );
     }
 
     private void clearStartTimeoutLocked() {
@@ -686,6 +710,18 @@ final class TrackingLifecycleCoordinator {
     private int getStopRetryCount(long generation) {
         Integer count = stopTimeoutRetries.get(generation);
         return count == null ? 0 : count.intValue();
+    }
+
+    private long resolveRemainingStopTimeoutMs(long generation, long fallbackTimeoutMs) {
+        long persistedDeadline = store.getPendingStopDeadline();
+        if (generation == 0L || persistedDeadline <= 0L) {
+            return fallbackTimeoutMs <= 0L ? DEFAULT_ACK_TIMEOUT_MS : fallbackTimeoutMs;
+        }
+        long remaining = persistedDeadline - System.currentTimeMillis();
+        if (remaining <= 0L) {
+            return 0L;
+        }
+        return remaining;
     }
 
     private void failPendingStartGenerationLocked(long generation) {

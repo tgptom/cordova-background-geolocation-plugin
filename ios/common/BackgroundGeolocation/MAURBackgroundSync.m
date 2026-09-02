@@ -22,8 +22,10 @@
 - (instancetype) init
 {
     if(!(self = [super init])) return nil;
+
+    tasks = [[NSMutableArray alloc] init];
     
-    NSURLSessionConfiguration *conf = [NSURLSessionConfiguration backgroundSessionConfiguration:@"com.marianhello.session"];
+    NSURLSessionConfiguration *conf = [NSURLSessionConfiguration backgroundSessionConfigurationWithIdentifier:@"com.marianhello.session"];
     conf.allowsCellularAccess = YES;
     urlSession = [NSURLSession sessionWithConfiguration:conf delegate:self delegateQueue:[NSOperationQueue mainQueue]];
     
@@ -39,7 +41,9 @@
     [urlSession getTasksWithCompletionHandler:^(NSArray *dataTasks, NSArray *uploadTasks, NSArray *downloadTasks) {
         for(NSURLSessionUploadTask *task in uploadTasks) {
             DDLogInfo(@"Restored upload task %zu for %@", (unsigned long)task.taskIdentifier, task.originalRequest.URL);
-            [tasks addObject:task];
+            @synchronized (tasks) {
+                [tasks addObject:task];
+            }
             [task resume];
         }
         
@@ -49,7 +53,11 @@
 
 - (void)cancel
 {
-    for(NSURLSessionTask *task in tasks) {
+    NSArray *tasksSnapshot;
+    @synchronized (tasks) {
+        tasksSnapshot = [tasks copy];
+    }
+    for(NSURLSessionTask *task in tasksSnapshot) {
         [task cancel];
     }
 }
@@ -89,7 +97,9 @@
     }
     NSURLSessionTask *task = [urlSession uploadTaskWithRequest:request fromFile:jsonUrl];
     task.taskDescription = fileName;
-    [tasks addObject:task];
+    @synchronized (tasks) {
+        [tasks addObject:task];
+    }
     DDLogInfo(@"Started upload for %@ as task %zu/%@/%@", jsonUrl.lastPathComponent, (unsigned long)task.taskIdentifier, task.taskDescription, task);
     [task resume];
     
@@ -115,12 +125,16 @@ NSString *stringFromFileSize(unsigned long long theSize)
 - (NSString*)status
 {
     int64_t sent = 0, toSend = 0;
-    for(NSURLSessionUploadTask *task in tasks) {
+    NSArray *tasksSnapshot;
+    @synchronized (tasks) {
+        tasksSnapshot = [tasks copy];
+    }
+    for(NSURLSessionUploadTask *task in tasksSnapshot) {
         sent += task.countOfBytesSent;
         toSend += task.countOfBytesExpectedToSend;
     }
     return [NSString stringWithFormat:@"%@ being uploaded (%@ of %@)\nFiles on disk: %@",
-        [tasks valueForKeyPath:@"taskDescription"],
+        [tasksSnapshot valueForKeyPath:@"taskDescription"],
         stringFromFileSize(sent),
         stringFromFileSize(toSend),
 
@@ -138,7 +152,9 @@ NSString *stringFromFileSize(unsigned long long theSize)
     
     DDLogInfo(@"Finished uploading task %zu %@: %@ %@, HTTP %ld", (unsigned long)[task taskIdentifier], task.originalRequest.URL, error ?: @"Success", task.response, (long)statusCode);
     
-    [tasks removeObject:task];
+    @synchronized (tasks) {
+        [tasks removeObject:task];
+    }
     NSURL *fullPath = [NSURL fileURLWithPath:[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES)[0] stringByAppendingPathComponent:task.taskDescription]];
     [[NSFileManager defaultManager] removeItemAtURL:fullPath error:NULL];
     

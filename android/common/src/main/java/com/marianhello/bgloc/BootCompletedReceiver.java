@@ -29,8 +29,18 @@ public class BootCompletedReceiver extends BroadcastReceiver {
 
     @Override
      public void onReceive(Context context, Intent intent) {
-        Log.d(TAG, "Received boot completed");
-        ConfigurationDAO dao = DAOFactory.createConfigurationDAO(context);
+       if (intent == null || intent.getAction() == null) {
+           Log.w(TAG, "Ignoring boot receiver call with missing intent/action");
+           return;
+       }
+       String action = intent.getAction();
+       if (!Intent.ACTION_BOOT_COMPLETED.equals(action)
+               && !Intent.ACTION_LOCKED_BOOT_COMPLETED.equals(action)) {
+           Log.w(TAG, "Ignoring unsupported boot receiver action: " + action);
+           return;
+       }
+       Log.d(TAG, "Received boot completed");
+       ConfigurationDAO dao = DAOFactory.createConfigurationDAO(context);
         Config config = null;
 
         try {

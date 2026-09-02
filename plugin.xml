@@ -26,7 +26,7 @@
 
     <!-- android -->
     <platform name="android">
-        <preference name="GOOGLE_PLAY_SERVICES_VERSION" default="17+"/>
+        <preference name="GOOGLE_PLAY_SERVICES_VERSION" default="21.3.0"/>
         <preference name="ICON" default="@mipmap/ic_launcher" />
         <preference name="SMALL_ICON" default="@mipmap/ic_launcher" />
         <preference name="ACCOUNT_NAME" default="@string/app_name" />
@@ -173,7 +173,7 @@
             <receiver
                   android:name="com.marianhello.bgloc.BootCompletedReceiver"
                   android:enabled="true"
-                  android:exported="true">
+                 android:exported="false">
                <intent-filter>
                   <action android:name="android.intent.action.BOOT_COMPLETED" />
                </intent-filter>
@@ -190,6 +190,7 @@
             <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
             <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
             <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+            <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
             <uses-permission android:name="android.permission.ACCESS_LOCATION_EXTRA_COMMANDS" />
             <uses-permission android:name="android.permission.INTERNET" />
             <uses-permission android:name="android.permission.WAKE_LOCK" />

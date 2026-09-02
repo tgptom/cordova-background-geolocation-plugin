@@ -3,7 +3,6 @@ apply from: '../common/VERSIONS.gradle'
 
 android {
     compileSdkVersion project.ext.getCompileSdkVersion()
-    buildToolsVersion project.ext.getBuildToolsVersion()
 
     defaultConfig {
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'

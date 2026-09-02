@@ -100,7 +100,7 @@ A more comprehensive example can be found in the [Documentation](https://haylltd
 ### Companion geofence integration (`startForGeofence`)
 
 `startForGeofence()` is intended for integration with a companion geofence plugin transition pipeline (currently aligned with `tgptom/cordova-plugin-geofence` PR #11 or successor hardened transition contract). It starts precise background tracking when the companion plugin signals geofence entry/dwell transitions.
-Use `stopForGeofence()` to stop only geofence-owned tracking safely.
+Use `stopForGeofence()` to stop only geofence-owned tracking. It is idempotent when geofence-owned tracking is already stopped, and returns ownership-conflict error (`code: 1005`) without stopping manual tracking when manual ownership is active.
 
 This plugin does **not** register geofences. Keep using a geofence plugin to create/remove monitored regions.
 

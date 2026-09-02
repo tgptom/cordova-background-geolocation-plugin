@@ -77,6 +77,9 @@ public class BackgroundGeolocationFacade {
     private long mPendingGeofenceStartGeneration;
 
     private org.slf4j.Logger logger;
+    static final int STOP_FOR_GEOFENCE_NOOP = 0;
+    static final int STOP_FOR_GEOFENCE_REQUEST_STOP = 1;
+    static final int STOP_FOR_GEOFENCE_OWNERSHIP_CONFLICT = 2;
 
     public interface StartRequestCallback {
         void onSuccess();
@@ -417,13 +420,19 @@ public class BackgroundGeolocationFacade {
         stopBackgroundService(stopGeneration);
     }
 
-    public boolean stopForGeofence() {
+    public boolean stopForGeofence() throws PluginException {
         logger.debug("Stopping geofence-owned service");
         unregisterLocationModeChangeReceiver();
 
         TrackingOwnershipStore.ReconciledState state = mLifecycleCoordinator.reconcileState();
-        if (state.owner != TrackingOwnershipStore.OWNER_GEOFENCE
-                && state.pendingStartOwner != TrackingOwnershipStore.OWNER_GEOFENCE) {
+        int outcome = evaluateStopForGeofenceOutcome(state);
+        if (outcome == STOP_FOR_GEOFENCE_OWNERSHIP_CONFLICT) {
+            throw new PluginException(
+                    "Tracking is currently owned by manual start.",
+                    PluginException.OWNERSHIP_CONFLICT_ERROR
+            );
+        }
+        if (outcome == STOP_FOR_GEOFENCE_NOOP) {
             logger.info("Ignoring stopForGeofence because geofence owner is not active");
             return false;
         }
@@ -437,7 +446,7 @@ public class BackgroundGeolocationFacade {
         }
 
         long stopGeneration = 0L;
-        if (state.owner == TrackingOwnershipStore.OWNER_GEOFENCE) {
+        if (outcome == STOP_FOR_GEOFENCE_REQUEST_STOP) {
             stopGeneration = mLifecycleCoordinator.requestStop(
                     TrackingOwnershipStore.OWNER_GEOFENCE,
                     STOP_ACK_TIMEOUT_MS,
@@ -446,13 +455,31 @@ public class BackgroundGeolocationFacade {
             stopBackgroundService(stopGeneration);
             return true;
         }
-        return true;
+        return false;
+    }
+
+    static int evaluateStopForGeofenceOutcome(TrackingOwnershipStore.ReconciledState state) {
+        if (state == null) {
+            return STOP_FOR_GEOFENCE_NOOP;
+        }
+        if (state.owner == TrackingOwnershipStore.OWNER_MANUAL) {
+            return STOP_FOR_GEOFENCE_OWNERSHIP_CONFLICT;
+        }
+        if (state.owner == TrackingOwnershipStore.OWNER_GEOFENCE) {
+            return STOP_FOR_GEOFENCE_REQUEST_STOP;
+        }
+        if (state.pendingStartOwner == TrackingOwnershipStore.OWNER_GEOFENCE) {
+            return STOP_FOR_GEOFENCE_NOOP;
+        }
+        return STOP_FOR_GEOFENCE_NOOP;
     }
 
     public JSONObject getGeofenceCompanionStatus() throws PluginException, JSONException {
         TrackingOwnershipStore.ReconciledState state = mLifecycleCoordinator.reconcileState();
         Config config = getStoredConfig();
         JSONObject json = new JSONObject();
+        json.put("statusSchemaVersion", 2);
+        json.put("pendingOwnersSupported", true);
         json.put("compatibilityNote", GeofenceTransitionHandler.COMPATIBILITY_NOTE);
         json.put("trackingOwner", state.owner);
         json.put("pendingStartOwner", state.pendingStartOwner);

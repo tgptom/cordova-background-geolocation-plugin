@@ -435,10 +435,12 @@ export interface ServiceStatus {
 }
 
 export interface GeofenceCompanionStatus {
+  statusSchemaVersion: number;
+  pendingOwnersSupported: boolean;
   compatibilityNote: string;
   trackingOwner: number;
-  pendingStartOwner: number;
-  pendingStopOwner: number;
+  pendingStartOwner?: number;
+  pendingStopOwner?: number;
   serviceStarted: boolean;
   hasValidUrl: boolean;
   startForegroundEnabled: boolean;
@@ -538,8 +540,9 @@ export interface BackgroundGeolocationPlugin {
   stop(): Promise<void>;
 
   /**
-   * Stop tracking only when currently owned by geofence integration.
-   * No-op when manual tracking ownership is active.
+   * Stop tracking owned by geofence integration.
+   * Resolves when geofence tracking is already stopped.
+   * Rejects with ownership-conflict error (`code: 1005`) when manual tracking owns the running service.
    *
    * Platform: iOS, Android
    */

@@ -33,6 +33,8 @@ typedef NS_ENUM(NSInteger, MAURTrackingOwner) {
 - (BOOL) stop:(NSError * __autoreleasing *)outError;
 - (BOOL) stopForOwner:(MAURTrackingOwner)owner error:(NSError * __autoreleasing *)outError;
 - (MAURTrackingOwner) trackingOwner;
+- (BOOL) supportsCompanionPendingOwners;
+- (NSInteger) geofenceCompanionStatusSchemaVersion;
 - (BOOL) hasManualTrackingIntent;
 - (BOOL) locationServicesEnabled;
 - (MAURLocationAuthorizationStatus) authorizationStatus;

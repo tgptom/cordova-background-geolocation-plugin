@@ -305,10 +305,29 @@ FMDBLogger *sqliteLogger;
 
 - (BOOL) stopForOwner:(MAURTrackingOwner)owner error:(NSError * __autoreleasing *)outError
 {
+    if (owner == MAURTrackingOwnerGeofence && isStarted && [self trackingOwner] == MAURTrackingOwnerManual) {
+        if (outError != nil) {
+            *outError = [NSError errorWithDomain:BGGeolocationDomain
+                                            code:MAURBGOwnershipConflict
+                                        userInfo:@{ NSLocalizedDescriptionKey: @"Tracking already started manually." }];
+        }
+        return NO;
+    }
+
     if ([self trackingOwner] != owner) {
         return YES;
     }
     return [self stop:outError];
+}
+
+- (BOOL) supportsCompanionPendingOwners
+{
+    return NO;
+}
+
+- (NSInteger) geofenceCompanionStatusSchemaVersion
+{
+    return 2;
 }
 
 - (MAURTrackingOwner) trackingOwner

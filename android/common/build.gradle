@@ -27,11 +27,8 @@ def projDependencies = [
 
 buildscript {
     repositories {
-        maven {
-            url 'https://maven.google.com/'
-            name 'Google'
-        }
-        jcenter()
+        google()
+        mavenCentral()
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:3.4.1'
@@ -43,10 +40,8 @@ buildscript {
 
 allprojects {
     repositories {
-        maven {
-            url 'https://maven.google.com'
-        }
-        jcenter()
+        google()
+        mavenCentral()
     }
 }
 

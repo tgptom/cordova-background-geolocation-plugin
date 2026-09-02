@@ -247,6 +247,21 @@ FMDBLogger *sqliteLogger;
         return NO;
     }
 
+    if (owner == MAURTrackingOwnerGeofence) {
+        MAURConfig *effectiveConfig = [self getConfig];
+        if (![effectiveConfig hasValidUrl] || [effectiveConfig stopOnTerminate]) {
+            if (outError != nil) {
+                NSString *errorMessage = ![effectiveConfig hasValidUrl]
+                    ? @"Unable to start geofence-owned background geolocation due to invalid URL configuration."
+                    : @"Unable to start geofence-owned background geolocation when stopOnTerminate is enabled.";
+                *outError = [NSError errorWithDomain:BGGeolocationDomain
+                                                code:MAURBGStartFailed
+                                            userInfo:@{ NSLocalizedDescriptionKey: errorMessage }];
+            }
+            return NO;
+        }
+    }
+
     if (owner == MAURTrackingOwnerManual) {
         [self setManualTrackingIntent:YES];
     }

@@ -14,6 +14,8 @@ package com.tenforwardconsulting.bgloc.cordova;
 import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 
 import com.marianhello.bgloc.BackgroundGeolocationFacade;
 import com.marianhello.bgloc.Config;
@@ -35,6 +37,8 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.Collection;
+import java.util.ArrayList;
+import java.util.List;
 
 public class BackgroundGeolocationPlugin extends CordovaPlugin implements PluginDelegate {
 
@@ -80,7 +84,10 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
     private CallbackContext callbackContext;
 
     private org.slf4j.Logger logger;
-    private CallbackContext pendingStopCallbackContext;
+    private static final long STOP_ACK_TIMEOUT_MS = 20000L;
+    private final Handler stopAckTimeoutHandler = new Handler(Looper.getMainLooper());
+    private final List<CallbackContext> pendingStopCallbackContexts = new ArrayList<>();
+    private Runnable pendingStopTimeoutRunnable;
 
     public static class ErrorPluginResult {
         public static PluginResult from(String message, int code) {
@@ -182,7 +189,7 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
                 public void run() {
                     boolean wasRunning = facade.isRunning();
                     if (wasRunning) {
-                        pendingStopCallbackContext = callbackContext;
+                        addPendingStopCallback(callbackContext);
                     }
                     facade.stop();
                     if (!wasRunning) {
@@ -198,13 +205,11 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
                 public void run() {
                     boolean shouldWaitForStopAck = facade.isRunning();
                     if (shouldWaitForStopAck) {
-                        pendingStopCallbackContext = callbackContext;
+                        addPendingStopCallback(callbackContext);
                     }
                     boolean stopRequested = facade.stopForGeofence();
                     if (!stopRequested || !shouldWaitForStopAck) {
-                        if (pendingStopCallbackContext == callbackContext) {
-                            pendingStopCallbackContext = null;
-                        }
+                        removePendingStopCallback(callbackContext);
                         callbackContext.success();
                         return;
                     }
@@ -471,6 +476,7 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
     @Override
     public void onDestroy() {
         logger.info("Destroying plugin");
+        resolvePendingStopCallbacksTimeout();
         facade.destroy();
         super.onDestroy();
     }
@@ -640,10 +646,7 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
                 return;
             case BackgroundGeolocationFacade.SERVICE_STOPPED:
                 sendEvent(STOP_EVENT);
-                if (pendingStopCallbackContext != null) {
-                    pendingStopCallbackContext.success();
-                    pendingStopCallbackContext = null;
-                }
+                resolvePendingStopCallbacksSuccess();
                 return;
         }
     }
@@ -661,5 +664,65 @@ public class BackgroundGeolocationPlugin extends CordovaPlugin implements Plugin
     @Override
     public void onError(PluginException e) {
         sendError(e);
+    }
+
+    private synchronized void addPendingStopCallback(CallbackContext callbackContext) {
+        if (callbackContext == null) {
+            return;
+        }
+        pendingStopCallbackContexts.add(callbackContext);
+        schedulePendingStopTimeoutLocked();
+    }
+
+    private synchronized void removePendingStopCallback(CallbackContext callbackContext) {
+        if (callbackContext == null) {
+            return;
+        }
+        pendingStopCallbackContexts.remove(callbackContext);
+        if (pendingStopCallbackContexts.isEmpty()) {
+            clearPendingStopTimeoutLocked();
+        }
+    }
+
+    private void resolvePendingStopCallbacksSuccess() {
+        List<CallbackContext> callbacks = drainPendingStopCallbacks();
+        for (CallbackContext callback : callbacks) {
+            callback.success();
+        }
+    }
+
+    private void resolvePendingStopCallbacksTimeout() {
+        List<CallbackContext> callbacks = drainPendingStopCallbacks();
+        for (CallbackContext callback : callbacks) {
+            callback.sendPluginResult(ErrorPluginResult.from(
+                    "Timed out waiting for stop acknowledgement",
+                    PluginException.SERVICE_ERROR
+            ));
+        }
+    }
+
+    private synchronized List<CallbackContext> drainPendingStopCallbacks() {
+        ArrayList<CallbackContext> callbacks = new ArrayList<>(pendingStopCallbackContexts);
+        pendingStopCallbackContexts.clear();
+        clearPendingStopTimeoutLocked();
+        return callbacks;
+    }
+
+    private synchronized void schedulePendingStopTimeoutLocked() {
+        clearPendingStopTimeoutLocked();
+        pendingStopTimeoutRunnable = new Runnable() {
+            @Override
+            public void run() {
+                resolvePendingStopCallbacksTimeout();
+            }
+        };
+        stopAckTimeoutHandler.postDelayed(pendingStopTimeoutRunnable, STOP_ACK_TIMEOUT_MS);
+    }
+
+    private synchronized void clearPendingStopTimeoutLocked() {
+        if (pendingStopTimeoutRunnable != null) {
+            stopAckTimeoutHandler.removeCallbacks(pendingStopTimeoutRunnable);
+            pendingStopTimeoutRunnable = null;
+        }
     }
 }

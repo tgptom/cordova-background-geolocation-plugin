@@ -131,7 +131,7 @@ static NSString * const TAG = @"CDVBackgroundGeolocation";
             [self sendError:error];
         }
         CDVPluginResult* result = nil;
-        if ([facade configure:config error:&error]) {
+        if (error == nil) {
             result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
         } else {
             result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsDictionary:[self errorToDictionary:error]];

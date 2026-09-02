@@ -106,6 +106,10 @@ var BackgroundGeolocation = {
     return execWithPromise(null, null, 'stop');
   },
 
+  stopForGeofence: function () {
+    return execWithPromise(null, null, 'stopForGeofence');
+  },
+
   switchMode: function (mode, success, failure) {
     return execWithPromise(success,
       failure,
@@ -210,6 +214,12 @@ var BackgroundGeolocation = {
     return execWithPromise(success,
       failure,
       'forceSync');
+  },
+
+  getGeofenceCompanionStatus: function (success, failure) {
+    return execWithPromise(success,
+      failure,
+      'getGeofenceCompanionStatus');
   },
 
   on: function (event, callbackFn) {

@@ -19,6 +19,7 @@
 - (void) start:(CDVInvokedUrlCommand*)command;
 - (void) startForGeofence:(CDVInvokedUrlCommand*)command;
 - (void) stop:(CDVInvokedUrlCommand*)command;
+- (void) stopForGeofence:(CDVInvokedUrlCommand*)command;
 - (void) getConfig:(CDVInvokedUrlCommand*)command;
 - (void) checkStatus:(CDVInvokedUrlCommand*)command;
 - (void) switchMode:(CDVInvokedUrlCommand*)command;
@@ -36,6 +37,7 @@
 - (void) startTask:(CDVInvokedUrlCommand*)command;
 - (void) endTask:(CDVInvokedUrlCommand*)command;
 - (void) forceSync:(CDVInvokedUrlCommand*)command;
+- (void) getGeofenceCompanionStatus:(CDVInvokedUrlCommand*)command;
 - (void) addEventListener:(CDVInvokedUrlCommand*)command;
 - (void) removeEventListener:(CDVInvokedUrlCommand*)command;
 

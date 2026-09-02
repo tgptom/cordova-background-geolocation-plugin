@@ -105,6 +105,13 @@ Platform: iOS, Android
 
 Stop background geolocation.
 
+## stopForGeofence()
+
+Platform: iOS, Android
+
+Stop tracking only when geofence ownership is active.
+This is a safe no-op when manual tracking ownership is active.
+
 ## getCurrentLocation(success, fail, options)
 
 Platform: iOS, Android
@@ -260,6 +267,22 @@ Platform: Android, iOS
 
 Force sync of pending locations. Option `syncThreshold` will be ignored and
 all pending locations will be immediately posted to `syncUrl` in single batch.
+
+## getGeofenceCompanionStatus(success, fail)
+
+Platform: iOS, Android
+
+Returns companion geofence integration status:
+
+| Parameter                 | Type      | Description |
+|--------------------------|-----------|-------------|
+| `compatibilityNote`      | `String`  | Companion contract reference |
+| `trackingOwner`          | `Number`  | Current owner (`0` none, `1` manual, `2` geofence) |
+| `pendingStartOwner`      | `Number`  | Pending start owner (ownership-aware on Android, `0` on iOS) |
+| `pendingStopOwner`       | `Number`  | Pending stop owner (ownership-aware on Android, `0` on iOS) |
+| `serviceStarted`         | `Boolean` | Service/plugin started state |
+| `hasValidUrl`            | `Boolean` | Persisted URL config is valid for companion start |
+| `startForegroundEnabled` | `Boolean` | Companion precondition flag (`startForeground` on Android, `!stopOnTerminate` equivalent on iOS) |
 
 ## getLogEntries(limit, fromId, minLevel, success, fail)
 

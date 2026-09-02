@@ -100,6 +100,7 @@ A more comprehensive example can be found in the [Documentation](https://haylltd
 ### Companion geofence integration (`startForGeofence`)
 
 `startForGeofence()` is intended for integration with a companion geofence plugin transition pipeline (currently aligned with `tgptom/cordova-plugin-geofence` PR #11 or successor hardened transition contract). It starts precise background tracking when the companion plugin signals geofence entry/dwell transitions.
+Use `stopForGeofence()` to stop only geofence-owned tracking safely.
 
 This plugin does **not** register geofences. Keep using a geofence plugin to create/remove monitored regions.
 
@@ -114,6 +115,14 @@ This plugin does **not** register geofences. Keep using a geofence plugin to cre
 - Android: ensure foreground-service declarations and user-visible location notification are correctly configured.
 - Android: physical-device validation is still required for modern background-start and foreground-service policy behavior.
 - App UX/policy: provide explicit user controls and disclosures for background tracking, and document how geofence transitions start/stop precise tracking.
+- Optional: call `getGeofenceCompanionStatus()` to inspect integration compatibility and ownership state in-app.
+
+#### Recommended real-device validation matrix
+- Reboot flow with `startOnBoot` enabled/disabled.
+- Process death and cold restart while tracking.
+- Doze/app standby behavior and OEM battery restrictions.
+- Rapid geofence EXIT → ENTER transition races.
+- Companion/plugin version mismatch and compatibility fallback behavior.
 
 ### Compatibility
 

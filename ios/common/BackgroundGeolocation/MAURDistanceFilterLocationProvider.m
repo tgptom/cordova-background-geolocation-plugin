@@ -78,8 +78,8 @@ enum {
 
 /**
  * configure provider
- * @param {Config} configuration
- * @param {NSError} optional error
+ * @param config Configuration to apply.
+ * @param outError Optional output error.
  */
 - (BOOL) onConfigure:(MAURConfig*)config error:(NSError * __autoreleasing *)outError
 {

@@ -110,9 +110,9 @@ FMDBLogger *sqliteLogger;
 }
 
 /**
- * configure manager
- * @param {Config} configuration
- * @param {NSError} optional error
+ * Configures the facade.
+ * @param config Configuration to apply.
+ * @param outError Optional output error.
  */
 - (BOOL) configure:(MAURConfig*)config error:(NSError * __autoreleasing *)outError
 {
@@ -687,7 +687,7 @@ FMDBLogger *sqliteLogger;
     [self.delegate onActivityChanged:activity];
 }
 
-/**@
+/**
  * If you don't stopMonitoring when application terminates, the app will be awoken still when a
  * new location arrives, essentially monitoring the user's location even when they've killed the app.
  * Might be desirable in certain apps.

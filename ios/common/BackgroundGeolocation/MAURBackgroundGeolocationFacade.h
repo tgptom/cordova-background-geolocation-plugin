@@ -22,16 +22,18 @@ typedef NS_ENUM(NSInteger, MAURTrackingOwner) {
     MAURTrackingOwnerGeofence = 2
 };
 
+NS_ASSUME_NONNULL_BEGIN
+
 @interface MAURBackgroundGeolocationFacade : NSObject
 
-@property (weak, nonatomic) id<MAURProviderDelegate> delegate;
+@property (weak, nonatomic, nullable) id<MAURProviderDelegate> delegate;
 
 + (instancetype) sharedInstance;
-- (BOOL) configure:(MAURConfig*)config error:(NSError * __autoreleasing *)outError;
-- (BOOL) start:(NSError * __autoreleasing *)outError;
-- (BOOL) startWithOwner:(MAURTrackingOwner)owner error:(NSError * __autoreleasing *)outError;
-- (BOOL) stop:(NSError * __autoreleasing *)outError;
-- (BOOL) stopForOwner:(MAURTrackingOwner)owner error:(NSError * __autoreleasing *)outError;
+- (BOOL) configure:(MAURConfig *)config error:(NSError * _Nullable __autoreleasing * _Nullable)outError;
+- (BOOL) start:(NSError * _Nullable __autoreleasing * _Nullable)outError;
+- (BOOL) startWithOwner:(MAURTrackingOwner)owner error:(NSError * _Nullable __autoreleasing * _Nullable)outError;
+- (BOOL) stop:(NSError * _Nullable __autoreleasing * _Nullable)outError;
+- (BOOL) stopForOwner:(MAURTrackingOwner)owner error:(NSError * _Nullable __autoreleasing * _Nullable)outError;
 - (MAURTrackingOwner) trackingOwner;
 - (BOOL) supportsCompanionPendingOwners;
 - (NSInteger) geofenceCompanionStatusSchemaVersion;
@@ -42,18 +44,18 @@ typedef NS_ENUM(NSInteger, MAURTrackingOwner) {
 - (void) showAppSettings;
 - (void) showLocationSettings;
 - (void) switchMode:(MAUROperationalMode)mode;
-- (MAURLocation*)getStationaryLocation;
-- (NSArray<MAURLocation*>*) getLocations;
-- (NSArray<MAURLocation*>*) getValidLocations;
-- (NSArray<MAURLocation*>*) getValidLocationsAndDelete;
-- (BOOL) deleteLocation:(NSNumber*)locationId error:(NSError * __autoreleasing *)outError;
-- (BOOL) deleteAllLocations:(NSError * __autoreleasing *)outError;
-- (MAURLocation*)getCurrentLocation:(int)timeout maximumAge:(long)maximumAge
+- (MAURLocation * _Nullable)getStationaryLocation;
+- (NSArray<MAURLocation *> *) getLocations;
+- (NSArray<MAURLocation *> *) getValidLocations;
+- (NSArray<MAURLocation *> *) getValidLocationsAndDelete;
+- (BOOL) deleteLocation:(NSNumber *)locationId error:(NSError * _Nullable __autoreleasing * _Nullable)outError;
+- (BOOL) deleteAllLocations:(NSError * _Nullable __autoreleasing * _Nullable)outError;
+- (MAURLocation * _Nullable)getCurrentLocation:(int)timeout maximumAge:(long)maximumAge
                  enableHighAccuracy:(BOOL)enableHighAccuracy
-                              error:(NSError * __autoreleasing *)outError;
-- (MAURConfig*) getConfig;
-- (NSArray*) getLogEntries:(NSInteger)limit;
-- (NSArray*) getLogEntries:(NSInteger)limit fromLogEntryId:(NSInteger)entryId minLogLevelFromString:(NSString *)minLogLevel;
+                              error:(NSError * _Nullable __autoreleasing * _Nullable)outError;
+- (MAURConfig *) getConfig;
+- (NSArray *) getLogEntries:(NSInteger)limit;
+- (NSArray *) getLogEntries:(NSInteger)limit fromLogEntryId:(NSInteger)entryId minLogLevelFromString:(NSString *)minLogLevel;
 - (void) forceSync;
 - (void) onAppTerminate;
 
@@ -69,5 +71,7 @@ typedef NS_ENUM(NSInteger, MAURTrackingOwner) {
 + (MAURLocationTransform _Nullable) locationTransform;
 
 @end
+
+NS_ASSUME_NONNULL_END
 
 #endif /* MAURBackgroundGeolocationFacade_h */

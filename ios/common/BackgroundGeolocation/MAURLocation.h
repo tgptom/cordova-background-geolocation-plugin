@@ -21,39 +21,43 @@ typedef NS_ENUM(NSInteger, MAURLocationStatus) {
     MAURLocationSyncPending = 2,
 };
 
+NS_ASSUME_NONNULL_BEGIN
+
 @interface MAURLocation : NSObject <NSCopying>
 
-@property (nonatomic, retain) NSNumber *locationId;
-@property (nonatomic, retain) NSDate *time;
-@property (nonatomic, retain) NSNumber *accuracy;
-@property (nonatomic, retain) NSNumber *altitudeAccuracy;
-@property (nonatomic, retain) NSNumber *speed;
-@property (nonatomic, retain) NSNumber *heading;
-@property (nonatomic, retain) NSNumber *altitude;
-@property (nonatomic, retain) NSNumber *latitude;
-@property (nonatomic, retain) NSNumber *longitude;
-@property (nonatomic, retain) NSString *provider;
-@property (nonatomic, retain) NSNumber *locationProvider;
-@property (nonatomic, retain) NSNumber *radius; //only for stationary locations
+@property (nonatomic, retain, nullable) NSNumber *locationId;
+@property (nonatomic, retain, nullable) NSDate *time;
+@property (nonatomic, retain, nullable) NSNumber *accuracy;
+@property (nonatomic, retain, nullable) NSNumber *altitudeAccuracy;
+@property (nonatomic, retain, nullable) NSNumber *speed;
+@property (nonatomic, retain, nullable) NSNumber *heading;
+@property (nonatomic, retain, nullable) NSNumber *altitude;
+@property (nonatomic, retain, nullable) NSNumber *latitude;
+@property (nonatomic, retain, nullable) NSNumber *longitude;
+@property (nonatomic, retain, nullable) NSString *provider;
+@property (nonatomic, retain, nullable) NSNumber *locationProvider;
+@property (nonatomic, retain, nullable) NSNumber *radius; //only for stationary locations
 @property (nonatomic) BOOL isValid;
-@property (nonatomic, retain) NSDate *recordedAt;
+@property (nonatomic, retain, nullable) NSDate *recordedAt;
 
-+ (instancetype) fromCLLocation:(CLLocation*)location;
-+ (NSTimeInterval) locationAge:(CLLocation*)location;
-+ (NSMutableDictionary*) toDictionary:(CLLocation*)location;
++ (instancetype) fromCLLocation:(CLLocation *)location;
++ (NSTimeInterval) locationAge:(CLLocation *)location;
++ (NSMutableDictionary *) toDictionary:(CLLocation *)location;
 - (NSTimeInterval) locationAge;
-- (NSDictionary*) toDictionary;
-- (NSDictionary*) toDictionaryWithId;
-- (id) toResultFromTemplate:(id)locationTemplate;
+- (NSDictionary *) toDictionary;
+- (NSDictionary *) toDictionaryWithId;
+- (id) toResultFromTemplate:(id _Nullable)locationTemplate;
 - (CLLocationCoordinate2D) coordinate;
 - (BOOL) hasAccuracy;
 - (BOOL) hasTime;
-- (double) distanceFromLocation:(MAURLocation*)location;
-- (BOOL) isBetterLocation:(MAURLocation*)location;
-- (BOOL) isBeyond:(MAURLocation*)location radius:(NSInteger)radius;
-- (id) copyWithZone: (NSZone *)zone;
-- (id) getValueForKey:(id)key;
+- (double) distanceFromLocation:(MAURLocation *)location;
+- (BOOL) isBetterLocation:(MAURLocation * _Nullable)location;
+- (BOOL) isBeyond:(MAURLocation *)location radius:(NSInteger)radius;
+- (id) copyWithZone:(NSZone * _Nullable)zone;
+- (id _Nullable) getValueForKey:(id _Nullable)key;
 
 @end
+
+NS_ASSUME_NONNULL_END
 
 #endif /* MAURLocation_h */

@@ -325,9 +325,9 @@ MAURLocation* _location;
     return [NSString stringWithFormat:@"Location: id=%@ time=%@ lat=%@ lon=%@ accu=%@ aaccu=%@ speed=%@ bear=%@ alt=%@", locationId, time, latitude, longitude, accuracy, altitudeAccuracy, speed, heading, altitude];
 }
 
--(id) copyWithZone: (NSZone *) zone
+-(id) copyWithZone:(NSZone * _Nullable)zone
 {
-    MAURLocation *copy = [[[self class] allocWithZone: zone] init];
+    MAURLocation *copy = [[[self class] allocWithZone:zone] init];
     if (copy) {
         copy.time = time;
         copy.accuracy = accuracy;

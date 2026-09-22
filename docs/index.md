@@ -32,7 +32,8 @@ cordova plugin add cordova-background-geolocation-plugin \
   --variable GOOGLE_PLAY_SERVICES_VERSION=21.3.0 \
   --variable ANDROIDX_CORE_VERSION=1.13.1 \
   --variable ANDROIDX_APPCOMPAT_VERSION=1.7.0 \
-  --variable ALWAYS_USAGE_DESCRIPTION="App requires ..." \
+  --variable ALWAYS_USAGE_DESCRIPTION="App tracks location in the background for trip logging" \
+  --variable WHEN_IN_USE_USAGE_DESCRIPTION="App uses location while open to show your current position" \
   --variable MOTION_USAGE_DESCRIPTION="App requires motion detection"
 ```
 

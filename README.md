@@ -52,7 +52,8 @@ cordova plugin add cordova-background-geolocation-plugin \
   --variable GOOGLE_PLAY_SERVICES_VERSION=21.3.0 \
   --variable ANDROIDX_CORE_VERSION=1.13.1 \
   --variable ANDROIDX_APPCOMPAT_VERSION=1.7.0 \
-  --variable ALWAYS_USAGE_DESCRIPTION="App requires ..." \
+  --variable ALWAYS_USAGE_DESCRIPTION="App tracks location in the background for trip logging" \
+  --variable WHEN_IN_USE_USAGE_DESCRIPTION="App uses location while open to show your current position" \
   --variable MOTION_USAGE_DESCRIPTION="App requires motion detection"
 ```
 
@@ -117,7 +118,7 @@ This plugin does **not** register geofences. Keep using a geofence plugin to cre
   - `hasActiveInsideGeofence` (`Boolean`, true when at least one active geofence is still inside)
 
 #### Migration and store-safety notes
-- iOS: set meaningful app-specific `ALWAYS_USAGE_DESCRIPTION` / location purpose strings.
+- iOS: set meaningful app-specific `ALWAYS_USAGE_DESCRIPTION`, `WHEN_IN_USE_USAGE_DESCRIPTION`, and other location purpose strings.
 - Android: ensure foreground-service declarations and user-visible location notification are correctly configured.
 - Android: legacy SyncAdapter/account upload components are hardened in this release and have a staged WorkManager migration plan (`docs/android-sync-architecture.md`).
 - Android: physical-device validation is still required for modern background-start and foreground-service policy behavior.

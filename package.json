@@ -37,6 +37,7 @@
   },
   "scripts": {
     "lint": "cd android && ./gradlew :common:lint :CDVBackgroundGeolocation:lint --no-daemon",
+    "test:plugin-config": "node scripts/test-plugin-ios-location-usage-descriptions.js",
     "test:android": "cd android && ./gradlew :common:test :CDVBackgroundGeolocation:test :common:assembleDebug :CDVBackgroundGeolocation:assembleDebug --no-daemon",
     "test:ios": "xcodebuild test -project ios/common/BackgroundGeolocation.xcodeproj -target BackgroundGeolocationTests -destination 'platform=iOS Simulator,name=iPhone 15'",
     "pack:check": "npm pack --dry-run",

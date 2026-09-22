@@ -27,13 +27,9 @@
     "phonegap"
   ],
   "engines": {
-    "cordovaDependencies": {
-      "1.0.0": {
-        "cordova": ">=8.0.0",
-        "cordova-android": ">=12.0.0",
-        "cordova-ios": ">=8.0.0"
-      }
-    }
+    "cordova": ">=8.0.0",
+    "cordova-android": ">=12.0.0",
+    "cordova-ios": ">=8.0.0"
   },
   "scripts": {
     "lint": "cd android && ./gradlew :common:lint :CDVBackgroundGeolocation:lint --no-daemon",

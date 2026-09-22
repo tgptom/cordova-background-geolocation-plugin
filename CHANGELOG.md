@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- iOS plugin install preferences now support `WHEN_IN_USE_USAGE_DESCRIPTION` for `NSLocationWhenInUseUsageDescription` while keeping both Always location keys on `ALWAYS_USAGE_DESCRIPTION`.
+
 ## [v2.3.3](https://github.com/HaylLtd/cordova-background-geolocation-plugin/tree/v2.3.3) (2025-05-12)
 
 [Full Changelog](https://github.com/HaylLtd/cordova-background-geolocation-plugin/compare/v2.3.2...v2.3.3)
